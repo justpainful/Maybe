@@ -1,0 +1,19 @@
+# Maybe
+
+Maybe is a 100% local iOS 26+ library for the things that catch your attention and the ideas they become.
+
+## Product loop
+
+1. Save a photo, link, note, or file.
+2. Capture *what caught you?*
+3. Connect saved things to an idea through **Inspired by**.
+4. Rediscover older saves with **Again** and **Maybe?**.
+
+There is no account, backend, analytics SDK, cloud database, or remote AI service. Structured metadata is stored with SwiftData. Imported media is written under Application Support and referenced by relative path. Export creates a single `.maybe` archive that can be imported manually.
+
+## Build
+
+Open `Maybe.xcodeproj`, select the `Maybe` scheme, and run on an iOS 26 simulator.
+
+The CI workflow builds and runs unit tests on GitHub's `macos-26` runner.
+
