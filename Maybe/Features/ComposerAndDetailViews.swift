@@ -135,11 +135,12 @@ struct AddMaybeSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             switch kind {
             case .photo:
+                let isReady = payload != nil
                 PhotosPicker(selection: $photoSelection, matching: .images) {
-                    pickerSurface(
-                        symbol: payload == nil ? "photo.badge.plus" : "checkmark.circle.fill",
-                        title: payload == nil ? "Choose a photo" : "Photo ready",
-                        subtitle: payload == nil ? "It stays on this device" : "Tap to choose another",
+                    MaybePickerSurface(
+                        symbol: isReady ? "checkmark.circle.fill" : "photo.badge.plus",
+                        title: isReady ? "Photo ready" : "Choose a photo",
+                        subtitle: isReady ? "Tap to choose another" : "It stays on this device",
                         color: MaybePalette.blue
                     )
                 }
@@ -168,7 +169,7 @@ struct AddMaybeSheet: View {
                 Button {
                     isChoosingFile = true
                 } label: {
-                    pickerSurface(
+                    MaybePickerSurface(
                         symbol: payload == nil ? "doc.badge.plus" : "checkmark.circle.fill",
                         title: payloadFilename ?? "Choose a file",
                         subtitle: payload == nil ? "A local copy goes into Maybe" : "Tap to choose another",
@@ -224,29 +225,6 @@ struct AddMaybeSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color.white.opacity(0.46), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
             .maybeGlass(cornerRadius: 21)
-    }
-
-    private func pickerSurface(symbol: String, title: String, subtitle: String, color: Color) -> some View {
-        HStack(spacing: 16) {
-            Image(systemName: symbol)
-                .font(.system(size: 28, weight: .bold))
-                .frame(width: 58, height: 56)
-                .background(color.opacity(0.72), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(.headline, design: .rounded, weight: .bold))
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(MaybePalette.ink.opacity(0.54))
-            }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption.bold())
-        }
-        .foregroundStyle(MaybePalette.ink)
-        .padding(14)
-        .background(Color.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
-        .maybeGlass(cornerRadius: 23, tint: color.opacity(0.12), interactive: true)
     }
 
     private func accent(for kind: MaybeKind) -> Color {
@@ -348,6 +326,36 @@ struct AddMaybeSheet: View {
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+    }
+}
+
+private struct MaybePickerSurface: View {
+    let symbol: String
+    let title: String
+    let subtitle: String
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Image(systemName: symbol)
+                .font(.system(size: 28, weight: .bold))
+                .frame(width: 58, height: 56)
+                .background(color.opacity(0.72), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(.headline, design: .rounded, weight: .bold))
+                Text(subtitle)
+                    .font(.caption)
+                    .foregroundStyle(MaybePalette.ink.opacity(0.54))
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.bold())
+        }
+        .foregroundStyle(MaybePalette.ink)
+        .padding(14)
+        .background(Color.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .maybeGlass(cornerRadius: 23, tint: color.opacity(0.12), interactive: true)
     }
 }
 
@@ -703,4 +711,3 @@ struct SurpriseView: View {
 private extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }
-
