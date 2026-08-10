@@ -15,10 +15,18 @@ jobs:
     timeout-minutes: 25
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Show Xcode version
         run: xcodebuild -version
+
+      - name: Select simulator
+        run: |
+          SIMULATOR_UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(d["udid"] for runtime, values in devices.items() if "iOS-26" in runtime for d in values if d["name"] == "iPhone 17"))')
+          echo "SIMULATOR_UDID=$SIMULATOR_UDID" >> "$GITHUB_ENV"
+          xcrun simctl shutdown all || true
+          xcrun simctl boot "$SIMULATOR_UDID"
+          sleep 8
 
       - name: Build and test
         run: |
@@ -26,7 +34,7 @@ jobs:
           xcodebuild test \
             -project Maybe.xcodeproj \
             -scheme Maybe \
-            -destination 'platform=iOS Simulator,name=iPhone 17,OS=latest' \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
             -derivedDataPath DerivedData \
             -resultBundlePath artifacts/MaybeTests.xcresult
 
@@ -35,13 +43,8 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/screenshots
 
-          SIMULATOR_UDID=$(xcrun simctl list devices booted -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next((d["udid"] for values in devices.values() for d in values), ""))')
-          if [ -z "$SIMULATOR_UDID" ]; then
-            SIMULATOR_UDID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next(d["udid"] for runtime, values in devices.items() if "iOS-26" in runtime for d in values if d["name"] == "iPhone 17"))')
-            xcrun simctl boot "$SIMULATOR_UDID"
-          fi
-
-          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
+          sleep 5
           xcrun simctl status_bar "$SIMULATOR_UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
 
           APP_PATH=$(find DerivedData/Build/Products/Debug-iphonesimulator -maxdepth 2 -name Maybe.app -print -quit)
