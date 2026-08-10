@@ -15,6 +15,22 @@ struct MaybeTests {
         #expect(LocalMediaStore.hash(data) != LocalMediaStore.hash(Data("another-file".utf8)))
     }
 
+    @Test("Share records survive local serialization")
+    func shareRecordRoundTrip() throws {
+        let record = SharedCaptureRecord(
+            kindRawValue: "link",
+            title: "Reference",
+            thought: "The floating controls",
+            sourceURLString: "https://example.com",
+            ideaTitle: "Maybe app UI"
+        )
+        let data = try JSONEncoder().encode(record)
+        let decoded = try JSONDecoder().decode(SharedCaptureRecord.self, from: data)
+
+        #expect(decoded.id == record.id)
+        #expect(decoded.ideaTitle == "Maybe app UI")
+    }
+
     @Test("An unseen favorite resurfaces before a fresh item")
     func resurfacingPrefersOldUsefulThings() {
         let now = Date(timeIntervalSince1970: 2_000_000)
@@ -36,4 +52,3 @@ struct MaybeTests {
         #expect(ResurfacingEngine.score(olderFavorite, now: now) > ResurfacingEngine.score(fresh, now: now))
     }
 }
-

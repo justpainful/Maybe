@@ -70,6 +70,77 @@ enum ResurfacingEngine {
     }
 }
 
+enum ShareInboxImporter {
+    @MainActor
+    static func importPending(into context: ModelContext, mediaStore: LocalMediaStore = .init()) -> Int {
+        let captures = MaybeSharedContainer.pendingCaptures()
+        guard !captures.isEmpty else { return 0 }
+
+        let ideas = (try? context.fetch(FetchDescriptor<Idea>())) ?? []
+        let attachments = (try? context.fetch(FetchDescriptor<MediaAttachment>())) ?? []
+        var existingHashes = Set(attachments.map(\.sha256))
+        var importedIDs = Set<UUID>()
+        var count = 0
+
+        for capture in captures {
+            let record = capture.record
+            let hash = capture.payload.map(LocalMediaStore.hash)
+
+            if let hash, existingHashes.contains(hash) {
+                importedIDs.insert(record.id)
+                continue
+            }
+
+            let item = SavedItem(
+                id: record.id,
+                kind: MaybeKind(rawValue: record.kindRawValue) ?? .note,
+                title: record.title,
+                note: record.thought,
+                createdAt: record.createdAt,
+                sourceURLString: record.sourceURLString,
+                isInbox: true,
+                accentHex: MaybePalette.accentHexes[count % MaybePalette.accentHexes.count],
+                visualSeed: count % 5
+            )
+            context.insert(item)
+
+            if let payload = capture.payload, let hash {
+                let mediaKind: MediaKind = item.kind == .photo ? .image : .file
+                if let path = try? mediaStore.write(
+                    payload,
+                    filename: record.originalFilename ?? "shared-item",
+                    kind: mediaKind
+                ) {
+                    item.media.append(
+                        MediaAttachment(
+                            type: mediaKind,
+                            localPath: path,
+                            originalFilename: record.originalFilename ?? "shared-item",
+                            sha256: hash,
+                            item: item
+                        )
+                    )
+                    existingHashes.insert(hash)
+                }
+            }
+
+            if let ideaTitle = record.ideaTitle,
+               let idea = ideas.first(where: { $0.title == ideaTitle }) {
+                idea.items.append(item)
+                idea.modifiedAt = .now
+            }
+
+            importedIDs.insert(record.id)
+            count += 1
+        }
+
+        try? context.save()
+        MaybeSharedContainer.removeCaptureIDs(importedIDs)
+        MaybeSharedContainer.publishIdeaTitles(ideas.map(\.title))
+        return count
+    }
+}
+
 extension UTType {
     static let maybeLibrary = UTType(exportedAs: "com.maybe.library", conformingTo: .json)
 }
@@ -267,4 +338,3 @@ enum LibraryArchiveService {
         return importedCount
     }
 }
-

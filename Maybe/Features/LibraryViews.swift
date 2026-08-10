@@ -61,6 +61,7 @@ struct HomeView: View {
                     }
                     .padding(.vertical, 8)
                 }
+                .scrollEdgeEffectHidden(true, for: .all)
                 .contentMargins(.horizontal, 2, for: .scrollContent)
             }
         }
@@ -90,6 +91,7 @@ struct HomeView: View {
                     }
                     .padding(.vertical, 8)
                 }
+                .scrollEdgeEffectHidden(true, for: .all)
             }
         }
     }
@@ -238,6 +240,7 @@ struct InboxView: View {
             }
             .padding(.vertical, 5)
         }
+        .scrollEdgeEffectHidden(true, for: .all)
         .buttonStyle(.plain)
     }
 
@@ -344,6 +347,7 @@ struct LibrarySearchView: View {
                     }
                     .padding(.vertical, 8)
                 }
+                .scrollEdgeEffectHidden(true, for: .all)
                 .buttonStyle(.plain)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets())
@@ -392,4 +396,3 @@ struct LibrarySearchView: View {
         MaybeKind.allCases.firstIndex(of: kind) ?? 0
     }
 }
-

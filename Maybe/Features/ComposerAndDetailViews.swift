@@ -127,6 +127,7 @@ struct AddMaybeSheet: View {
                 }
                 .padding(.bottom, 7)
             }
+            .scrollEdgeEffectHidden(true, for: .all)
         }
     }
 
@@ -467,6 +468,8 @@ struct NewIdeaSheet: View {
         )
         modelContext.insert(idea)
         try? modelContext.save()
+        let allIdeaTitles = ((try? modelContext.fetch(FetchDescriptor<Idea>())) ?? []).map(\.title)
+        MaybeSharedContainer.publishIdeaTitles(allIdeaTitles)
         dismiss()
     }
 }

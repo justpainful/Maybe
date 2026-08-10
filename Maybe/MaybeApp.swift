@@ -26,9 +26,11 @@ struct MaybeApp: App {
                 .preferredColorScheme(.light)
                 .task {
                     SampleLibrarySeeder.seedIfNeeded(in: modelContainer.mainContext)
+                    _ = ShareInboxImporter.importPending(into: modelContainer.mainContext)
+                    let ideas = (try? modelContainer.mainContext.fetch(FetchDescriptor<Idea>())) ?? []
+                    MaybeSharedContainer.publishIdeaTitles(ideas.map(\.title))
                 }
         }
         .modelContainer(modelContainer)
     }
 }
-

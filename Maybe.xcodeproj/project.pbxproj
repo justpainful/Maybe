@@ -18,6 +18,10 @@
 		B00000000000000000000009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000009 /* SettingsView.swift */; };
 		B00000000000000000000010 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000010 /* Assets.xcassets */; };
 		B00000000000000000000011 /* MaybeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000011 /* MaybeTests.swift */; };
+		B00000000000000000000012 /* SharedCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000012 /* SharedCapture.swift */; };
+		B00000000000000000000013 /* MaybeShare.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A00000000000000000000022 /* MaybeShare.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		B00000000000000000000014 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000014 /* ShareViewController.swift */; };
+		B00000000000000000000015 /* SharedCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000012 /* SharedCapture.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -28,7 +32,28 @@
 			remoteGlobalIDString = 700000000000000000000001;
 			remoteInfo = Maybe;
 		};
+		300000000000000000000002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 900000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 700000000000000000000003;
+			remoteInfo = MaybeShare;
+		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		600000000000000000000007 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B00000000000000000000013 /* MaybeShare.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		A00000000000000000000001 /* MaybeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaybeApp.swift; sourceTree = "<group>"; };
@@ -42,8 +67,14 @@
 		A00000000000000000000009 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A00000000000000000000010 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A00000000000000000000011 /* MaybeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaybeTests.swift; sourceTree = "<group>"; };
+		A00000000000000000000012 /* SharedCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedCapture.swift; sourceTree = "<group>"; };
+		A00000000000000000000013 /* Maybe.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Maybe.entitlements; sourceTree = "<group>"; };
+		A00000000000000000000014 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
+		A00000000000000000000015 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		A00000000000000000000016 /* MaybeShare.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MaybeShare.entitlements; sourceTree = "<group>"; };
 		A00000000000000000000020 /* Maybe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Maybe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A00000000000000000000021 /* MaybeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MaybeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A00000000000000000000022 /* MaybeShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MaybeShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -61,6 +92,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		600000000000000000000009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -68,6 +106,7 @@
 			isa = PBXGroup;
 			children = (
 				100000000000000000000002 /* Maybe */,
+				100000000000000000000009 /* MaybeShare */,
 				100000000000000000000007 /* MaybeTests */,
 				100000000000000000000008 /* Products */,
 			);
@@ -82,6 +121,7 @@
 				100000000000000000000005 /* DesignSystem */,
 				100000000000000000000006 /* Features */,
 				A00000000000000000000010 /* Assets.xcassets */,
+				A00000000000000000000013 /* Maybe.entitlements */,
 			);
 			path = Maybe;
 			sourceTree = "<group>";
@@ -98,6 +138,7 @@
 			isa = PBXGroup;
 			children = (
 				A00000000000000000000003 /* LibraryServices.swift */,
+				A00000000000000000000012 /* SharedCapture.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -130,11 +171,22 @@
 			path = MaybeTests;
 			sourceTree = "<group>";
 		};
+		100000000000000000000009 /* MaybeShare */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000014 /* ShareViewController.swift */,
+				A00000000000000000000015 /* Info.plist */,
+				A00000000000000000000016 /* MaybeShare.entitlements */,
+			);
+			path = MaybeShare;
+			sourceTree = "<group>";
+		};
 		100000000000000000000008 /* Products */ = {
 			isa = PBXGroup;
 			children = (
 				A00000000000000000000020 /* Maybe.app */,
 				A00000000000000000000021 /* MaybeTests.xctest */,
+				A00000000000000000000022 /* MaybeShare.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -149,10 +201,12 @@
 				600000000000000000000002 /* Sources */,
 				600000000000000000000001 /* Frameworks */,
 				600000000000000000000003 /* Resources */,
+				600000000000000000000007 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				200000000000000000000002 /* PBXTargetDependency */,
 			);
 			name = Maybe;
 			packageProductDependencies = (
@@ -181,6 +235,25 @@
 			productReference = A00000000000000000000021 /* MaybeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		700000000000000000000003 /* MaybeShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 400000000000000000000004 /* Build configuration list for PBXNativeTarget "MaybeShare" */;
+			buildPhases = (
+				600000000000000000000008 /* Sources */,
+				600000000000000000000009 /* Frameworks */,
+				600000000000000000000010 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MaybeShare;
+			packageProductDependencies = (
+			);
+			productName = MaybeShare;
+			productReference = A00000000000000000000022 /* MaybeShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -197,6 +270,9 @@
 					700000000000000000000002 = {
 						CreatedOnToolsVersion = 26.0;
 						TestTargetID = 700000000000000000000001;
+					};
+					700000000000000000000003 = {
+						CreatedOnToolsVersion = 26.0;
 					};
 				};
 			};
@@ -216,6 +292,7 @@
 			targets = (
 				700000000000000000000001 /* Maybe */,
 				700000000000000000000002 /* MaybeTests */,
+				700000000000000000000003 /* MaybeShare */,
 			);
 		};
 /* End PBXProject section */
@@ -230,6 +307,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		600000000000000000000006 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		600000000000000000000010 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -252,6 +336,7 @@
 				B00000000000000000000007 /* LibraryViews.swift in Sources */,
 				B00000000000000000000008 /* ComposerAndDetailViews.swift in Sources */,
 				B00000000000000000000009 /* SettingsView.swift in Sources */,
+				B00000000000000000000012 /* SharedCapture.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -263,6 +348,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		600000000000000000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B00000000000000000000014 /* ShareViewController.swift in Sources */,
+				B00000000000000000000015 /* SharedCapture.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -270,6 +364,11 @@
 			isa = PBXTargetDependency;
 			target = 700000000000000000000001 /* Maybe */;
 			targetProxy = 300000000000000000000001 /* PBXContainerItemProxy */;
+		};
+		200000000000000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 700000000000000000000003 /* MaybeShare */;
+			targetProxy = 300000000000000000000002 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -398,6 +497,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Maybe/Maybe.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -424,6 +524,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Maybe/Maybe.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -481,6 +582,58 @@
 			};
 			name = Release;
 		};
+		500000000000000000000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = MaybeShare/MaybeShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MaybeShare/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.justpainful.Maybe.Share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		500000000000000000000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = MaybeShare/MaybeShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MaybeShare/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.justpainful.Maybe.Share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -511,8 +664,16 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		400000000000000000000004 /* Build configuration list for PBXNativeTarget "MaybeShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				500000000000000000000007 /* Debug */,
+				500000000000000000000008 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 	};
 	rootObject = 900000000000000000000001 /* Project object */;
 }
-

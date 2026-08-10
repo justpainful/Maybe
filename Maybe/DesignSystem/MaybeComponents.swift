@@ -143,6 +143,7 @@ struct FlowTags: View {
                 }
             }
         }
+        .scrollEdgeEffectHidden(true, for: .all)
     }
 }
 
@@ -364,4 +365,3 @@ struct EmptyLibraryView: View {
         .padding(30)
     }
 }
-
