@@ -63,7 +63,7 @@ final class ShareCaptureModel: ObservableObject {
             kindRawValue = "photo"
             title = provider.suggestedName ?? "A photo that caught me"
             originalFilename = provider.suggestedName.map { "\($0).jpg" } ?? "shared-photo.jpg"
-            provider.loadDataRepresentation(for: .image) { [weak self] data, error in
+            _ = provider.loadDataRepresentation(for: .image) { [weak self] data, error in
                 Task { @MainActor in
                     self?.payload = data
                     self?.errorMessage = error?.localizedDescription
@@ -252,4 +252,3 @@ private struct ShareCaptureView: View {
         )
     }
 }
-
