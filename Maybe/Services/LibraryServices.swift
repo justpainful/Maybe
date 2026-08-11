@@ -53,9 +53,13 @@ struct LocalMediaStore {
             return nil
         }
 
+        return try writeThumbnail(thumbnailData)
+    }
+
+    func writeThumbnail(_ data: Data) throws -> String {
         try prepareDirectories()
         let relativePath = "Thumbnails/\(UUID().uuidString).jpg"
-        try thumbnailData.write(to: rootURL.appending(path: relativePath), options: .atomic)
+        try data.write(to: rootURL.appending(path: relativePath), options: .atomic)
         return relativePath
     }
 
@@ -254,27 +258,24 @@ enum ShareInboxImporter {
 }
 
 extension UTType {
-    static let maybeLibrary = UTType(exportedAs: "com.maybe.library", conformingTo: .json)
+    static let maybeLibrary = UTType(exportedAs: "com.maybe.library", conformingTo: .package)
 }
 
 struct MaybeArchiveDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.maybeLibrary, .json] }
+    static var readableContentTypes: [UTType] { [.maybeLibrary] }
 
-    var data: Data
+    var wrapper: FileWrapper
 
-    init(data: Data = Data()) {
-        self.data = data
+    init(wrapper: FileWrapper = FileWrapper(directoryWithFileWrappers: [:])) {
+        self.wrapper = wrapper
     }
 
     init(configuration: ReadConfiguration) throws {
-        guard let data = configuration.file.regularFileContents else {
-            throw CocoaError(.fileReadCorruptFile)
-        }
-        self.data = data
+        wrapper = configuration.file
     }
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: data)
+        wrapper
     }
 }
 
@@ -310,6 +311,8 @@ enum LibraryArchiveService {
         var sha256: String
         var width: Double
         var height: Double
+        var archivePath: String?
+        var thumbnailArchivePath: String?
         var data: Data?
     }
 
@@ -325,7 +328,13 @@ enum LibraryArchiveService {
         var itemIDs: [UUID]
     }
 
-    static func export(items: [SavedItem], ideas: [Idea], mediaStore: LocalMediaStore = .init()) throws -> Data {
+    static func exportPackage(
+        items: [SavedItem],
+        ideas: [Idea],
+        mediaStore: LocalMediaStore = .init()
+    ) throws -> FileWrapper {
+        var mediaFiles: [String: FileWrapper] = [:]
+        var thumbnailFiles: [String: FileWrapper] = [:]
         let itemRecords = items.map { item in
             ItemRecord(
                 id: item.id,
@@ -342,6 +351,19 @@ enum LibraryArchiveService {
                 accentHex: item.accentHex,
                 visualSeed: item.visualSeed,
                 media: item.media.map { attachment in
+                    let safeName = attachment.originalFilename
+                        .replacingOccurrences(of: "/", with: "-")
+                        .replacingOccurrences(of: "\\", with: "-")
+                    let archivePath = "\(attachment.id.uuidString)-\(safeName)"
+                    if let data = mediaStore.data(at: attachment.localPath) {
+                        mediaFiles[archivePath] = FileWrapper(regularFileWithContents: data)
+                    }
+                    let thumbnailArchivePath = attachment.thumbnailPath.flatMap { path -> String? in
+                        guard let data = mediaStore.data(at: path) else { return nil }
+                        let name = "\(attachment.id.uuidString).jpg"
+                        thumbnailFiles[name] = FileWrapper(regularFileWithContents: data)
+                        return name
+                    }
                     MediaRecord(
                         id: attachment.id,
                         type: attachment.typeRawValue,
@@ -349,7 +371,9 @@ enum LibraryArchiveService {
                         sha256: attachment.sha256,
                         width: attachment.width,
                         height: attachment.height,
-                        data: mediaStore.data(at: attachment.localPath)
+                        archivePath: mediaFiles[archivePath] == nil ? nil : archivePath,
+                        thumbnailArchivePath: thumbnailArchivePath,
+                        data: nil
                     )
                 }
             )
@@ -369,24 +393,37 @@ enum LibraryArchiveService {
             )
         }
 
-        let archive = Archive(version: 1, exportedAt: .now, items: itemRecords, ideas: ideaRecords)
+        let archive = Archive(version: 2, exportedAt: .now, items: itemRecords, ideas: ideaRecords)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(archive)
+        let libraryData = try encoder.encode(archive)
+        return FileWrapper(directoryWithFileWrappers: [
+            "library.json": FileWrapper(regularFileWithContents: libraryData),
+            "media": FileWrapper(directoryWithFileWrappers: mediaFiles),
+            "thumbnails": FileWrapper(directoryWithFileWrappers: thumbnailFiles),
+        ])
     }
 
     @MainActor
-    static func importArchive(
-        data: Data,
+    static func importPackage(
+        wrapper: FileWrapper,
         into context: ModelContext,
         mediaStore: LocalMediaStore = .init()
     ) throws -> Int {
+        guard wrapper.isDirectory,
+              let children = wrapper.fileWrappers,
+              let data = children["library.json"]?.regularFileContents else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
         let archive = try JSONDecoder().decode(Archive.self, from: data)
-        guard archive.version == 1 else { throw CocoaError(.fileReadUnsupportedScheme) }
+        guard archive.version == 2 else { throw CocoaError(.fileReadUnsupportedScheme) }
+
+        let mediaFiles = children["media"]?.fileWrappers ?? [:]
+        let thumbnailFiles = children["thumbnails"]?.fileWrappers ?? [:]
 
         let existingItems = try context.fetch(FetchDescriptor<SavedItem>())
         let existingIdeas = try context.fetch(FetchDescriptor<Idea>())
-        let existingHashes = Set(try context.fetch(FetchDescriptor<MediaAttachment>()).map(\.sha256))
+        var existingHashes = Set(try context.fetch(FetchDescriptor<MediaAttachment>()).map(\.sha256))
         var itemsByID = Dictionary(uniqueKeysWithValues: existingItems.map { ($0.id, $0) })
         var importedCount = 0
 
@@ -409,15 +446,20 @@ enum LibraryArchiveService {
             context.insert(item)
 
             for media in record.media where !existingHashes.contains(media.sha256) {
-                guard let payload = media.data else { continue }
+                let payload = media.archivePath.flatMap { mediaFiles[$0]?.regularFileContents } ?? media.data
+                guard let payload else { continue }
                 let kind = MediaKind(rawValue: media.type) ?? .file
                 let relativePath = try mediaStore.write(payload, filename: media.originalFilename, kind: kind)
+                let thumbnailPath = media.thumbnailArchivePath
+                    .flatMap { thumbnailFiles[$0]?.regularFileContents }
+                    .flatMap { try? mediaStore.writeThumbnail($0) }
+                    ?? (kind == .image ? try? mediaStore.createThumbnail(from: payload) : nil)
                 item.media.append(
                     MediaAttachment(
                         id: media.id,
                         type: kind,
                         localPath: relativePath,
-                        thumbnailPath: kind == .image ? try? mediaStore.createThumbnail(from: payload) : nil,
+                        thumbnailPath: thumbnailPath,
                         width: media.width,
                         height: media.height,
                         originalFilename: media.originalFilename,
@@ -425,6 +467,7 @@ enum LibraryArchiveService {
                         item: item
                     )
                 )
+                existingHashes.insert(media.sha256)
             }
 
             itemsByID[item.id] = item

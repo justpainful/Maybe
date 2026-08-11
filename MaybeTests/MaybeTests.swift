@@ -91,4 +91,37 @@ struct MaybeTests {
         #expect(try container.mainContext.fetch(FetchDescriptor<Idea>()).isEmpty)
         #expect(try container.mainContext.fetch(FetchDescriptor<SavedItem>()).count == 1)
     }
+
+    @Test("Library backup is a package with JSON and media folders")
+    @MainActor
+    func libraryPackageRoundTrip() throws {
+        let schema = Schema(versionedSchema: MaybeSchemaV1.self)
+        let source = try ModelContainer(
+            for: schema,
+            migrationPlan: MaybeMigrationPlan.self,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let item = SavedItem(kind: .note, title: "A useful thought", note: "Keep this")
+        let idea = Idea(title: "A future project", items: [item])
+        source.mainContext.insert(item)
+        source.mainContext.insert(idea)
+        try source.mainContext.save()
+
+        let package = try LibraryArchiveService.exportPackage(items: [item], ideas: [idea])
+        #expect(package.isDirectory)
+        #expect(package.fileWrappers?["library.json"] != nil)
+        #expect(package.fileWrappers?["media"]?.isDirectory == true)
+        #expect(package.fileWrappers?["thumbnails"]?.isDirectory == true)
+
+        let destination = try ModelContainer(
+            for: schema,
+            migrationPlan: MaybeMigrationPlan.self,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let imported = try LibraryArchiveService.importPackage(wrapper: package, into: destination.mainContext)
+
+        #expect(imported == 1)
+        #expect(try destination.mainContext.fetch(FetchDescriptor<SavedItem>()).first?.title == "A useful thought")
+        #expect(try destination.mainContext.fetch(FetchDescriptor<Idea>()).first?.items.count == 1)
+    }
 }

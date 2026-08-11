@@ -118,7 +118,7 @@ struct AddMaybeSheet: View {
                     Image(systemName: "xmark")
                         .font(.system(size: 14, weight: .bold))
                         .foregroundStyle(MaybePalette.ink)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 44, height: 44)
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
@@ -137,23 +137,26 @@ struct AddMaybeSheet: View {
             Text("What are you keeping?")
                 .font(.maybeRounded(20, weight: .bold))
 
-            GlassEffectContainer(spacing: 8) {
-                HStack(spacing: 8) {
-                    ForEach(MaybeKind.allCases) { option in
-                        ComposerKindButton(
-                            title: option.title,
-                            symbol: composerSymbol(for: option),
-                            color: accent(for: option),
-                            isSelected: kind == option
-                        ) {
-                            withAnimation(.snappy(duration: 0.22)) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                GlassEffectContainer(spacing: 8) {
+                    HStack(spacing: 8) {
+                        ForEach(MaybeKind.allCases) { option in
+                            ComposerKindButton(
+                                title: option.title,
+                                symbol: composerSymbol(for: option),
+                                color: accent(for: option),
+                                isSelected: kind == option
+                            ) {
                                 kind = option
                             }
+                            .frame(minWidth: 78)
+                            .accessibilityIdentifier("kind-\(option.rawValue)")
                         }
-                        .accessibilityIdentifier("kind-\(option.rawValue)")
                     }
                 }
             }
+            .scrollEdgeEffectHidden(true, for: .all)
+            .scrollClipDisabled()
         }
     }
 
@@ -251,7 +254,7 @@ struct AddMaybeSheet: View {
                                     .font(.system(.caption, design: .rounded, weight: .bold))
                                     .foregroundStyle(MaybePalette.ink)
                                     .padding(.horizontal, 13)
-                                    .frame(height: 34)
+                                    .frame(minHeight: 44)
                                     .glassEffect(
                                         .regular.tint(MaybePalette.green.opacity(0.34)).interactive(),
                                         in: Capsule()
@@ -427,15 +430,18 @@ private struct ComposerKindButton: View {
         }
         .buttonStyle(ComposerPressButtonStyle())
         .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 
 private struct ComposerPressButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .offset(y: configuration.isPressed ? 2 : 0)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .animation(.spring(response: 0.18, dampingFraction: 0.74), value: configuration.isPressed)
+            .offset(y: configuration.isPressed && !reduceMotion ? 2 : 0)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .animation(reduceMotion ? nil : .spring(response: 0.18, dampingFraction: 0.74), value: configuration.isPressed)
     }
 }
 

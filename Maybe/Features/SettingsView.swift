@@ -54,7 +54,7 @@ struct SettingsView: View {
             }
             .fileImporter(
                 isPresented: $isImporting,
-                allowedContentTypes: [.maybeLibrary, .json],
+                allowedContentTypes: [.maybeLibrary],
                 allowsMultipleSelection: false,
                 onCompletion: importLibrary
             )
@@ -95,16 +95,24 @@ struct SettingsView: View {
             Button(action: exportLibrary) {
                 Label("Export Maybe", systemImage: "square.and.arrow.up")
                     .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
             }
-            .buttonStyle(KeycapButtonStyle(color: MaybePalette.purple, cornerRadius: 21))
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.roundedRectangle(radius: 20))
+            .tint(MaybePalette.purple)
+            .foregroundStyle(MaybePalette.ink)
 
             Button {
                 isImporting = true
             } label: {
                 Label("Import Maybe", systemImage: "square.and.arrow.down")
                     .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
             }
-            .buttonStyle(KeycapButtonStyle(color: MaybePalette.glassWhite, cornerRadius: 21))
+            .buttonStyle(.glass)
+            .buttonBorderShape(.roundedRectangle(radius: 20))
+            .tint(MaybePalette.glassWhite)
+            .foregroundStyle(MaybePalette.ink)
         }
     }
 
@@ -159,7 +167,7 @@ struct SettingsView: View {
 
     private func exportLibrary() {
         do {
-            exportDocument = MaybeArchiveDocument(data: try LibraryArchiveService.export(items: items, ideas: ideas))
+            exportDocument = MaybeArchiveDocument(wrapper: try LibraryArchiveService.exportPackage(items: items, ideas: ideas))
             isExporting = true
         } catch {
             statusMessage = error.localizedDescription
@@ -171,12 +179,11 @@ struct SettingsView: View {
             guard let url = try result.get().first else { return }
             let accessing = url.startAccessingSecurityScopedResource()
             defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-            let data = try Data(contentsOf: url)
-            let count = try LibraryArchiveService.importArchive(data: data, into: modelContext)
+            let wrapper = try FileWrapper(url: url, options: .immediate)
+            let count = try LibraryArchiveService.importPackage(wrapper: wrapper, into: modelContext)
             statusMessage = "Imported \(count) new things."
         } catch {
             statusMessage = error.localizedDescription
         }
     }
 }
-

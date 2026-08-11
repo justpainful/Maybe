@@ -229,16 +229,18 @@ struct InspirationThumbnail: View {
     @State private var loadedImage: UIImage?
 
     var body: some View {
-        if let attachment = item.media.first,
-           attachment.type == .image,
-           let image = loadedImage {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFill()
-                .accessibilityLabel(item.title)
-        } else {
-            generatedArtwork
-                .accessibilityLabel("Preview for \(item.title)")
+        Group {
+            if let attachment = item.media.first,
+               attachment.type == .image,
+               let image = loadedImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .accessibilityLabel(item.title)
+            } else {
+                generatedArtwork
+                    .accessibilityLabel("Preview for \(item.title)")
+            }
         }
         .task(id: imagePath) {
             loadedImage = nil

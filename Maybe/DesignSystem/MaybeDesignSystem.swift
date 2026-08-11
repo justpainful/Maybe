@@ -93,6 +93,7 @@ extension View {
 }
 
 struct KeycapButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let color: Color
     var cornerRadius: CGFloat = 18
     var depth: CGFloat = 4
@@ -121,13 +122,14 @@ struct KeycapButtonStyle: ButtonStyle {
                 radius: configuration.isPressed ? 0 : 1,
                 y: configuration.isPressed ? 1 : depth
             )
-            .offset(y: configuration.isPressed ? depth - 1 : 0)
-            .scaleEffect(configuration.isPressed ? 0.985 : 1)
-            .animation(.spring(response: 0.2, dampingFraction: 0.72), value: configuration.isPressed)
+            .offset(y: configuration.isPressed && !reduceMotion ? depth - 1 : 0)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.985 : 1)
+            .animation(reduceMotion ? nil : .spring(response: 0.2, dampingFraction: 0.72), value: configuration.isPressed)
     }
 }
 
 struct RoundKeycapButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let color: Color
     var size: CGFloat = 58
 
@@ -144,9 +146,9 @@ struct RoundKeycapButtonStyle: ButtonStyle {
             }
             .overlay(Circle().stroke(MaybePalette.ink.opacity(0.17), lineWidth: 1))
             .shadow(color: MaybePalette.ink.opacity(configuration.isPressed ? 0.06 : 0.22), radius: 1, y: configuration.isPressed ? 1 : 4)
-            .offset(y: configuration.isPressed ? 3 : 0)
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
+            .offset(y: configuration.isPressed && !reduceMotion ? 3 : 0)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.96 : 1)
+            .animation(reduceMotion ? nil : .spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 
