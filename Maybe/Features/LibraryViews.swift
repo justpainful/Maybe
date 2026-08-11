@@ -136,7 +136,7 @@ struct HomeView: View {
                 ItemDetailView(item: item)
             } label: {
                 HStack(spacing: 14) {
-                    ItemPreview(item: item, compact: true)
+                    ItemPreview(item: item, size: .thumbnail)
                         .frame(width: 84, height: 84)
                         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                         .overlay {

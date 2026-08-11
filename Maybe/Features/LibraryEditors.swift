@@ -507,7 +507,7 @@ struct EditIdeaSheet: View {
         let isSelected = selectedIDs.contains(item.id)
         return Color.clear
             .aspectRatio(1, contentMode: .fit)
-            .overlay { ItemPreview(item: item, compact: true) }
+            .overlay { ItemPreview(item: item, size: .compact) }
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)

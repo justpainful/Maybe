@@ -269,11 +269,20 @@ struct LocalAttachmentImage: View {
 
 /// What a saved thing looks like before you open it.
 /// A photo shows the photo. Everything else shows its own content — never invented artwork.
+enum PreviewSize {
+    /// Small enough that any text would be cut mid-word: show a mark instead.
+    case thumbnail
+    case compact
+    case full
+}
+
 struct ItemPreview: View {
     let item: SavedItem
     var prefersOriginal = false
-    var compact = false
+    var size: PreviewSize = .full
     var contentMode: ContentMode = .fill
+
+    private var compact: Bool { size != .full }
 
     var body: some View {
         if let image = item.primaryImage {
@@ -292,16 +301,25 @@ struct ItemPreview: View {
 
     @ViewBuilder
     private var contentCard: some View {
-        switch item.kind {
-        case .note, .photo:
-            textCard(
-                item.note.isEmpty ? item.title : item.note,
-                symbol: item.kind == .note ? "text.quote" : "photo"
-            )
-        case .link:
-            linkCard
-        case .file:
-            fileCard
+        if size == .thumbnail {
+            ZStack {
+                tint.opacity(0.34)
+                Image(systemName: item.kind.symbol)
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(MaybePalette.ink.opacity(0.7))
+            }
+        } else {
+            switch item.kind {
+            case .note, .photo:
+                textCard(
+                    item.note.isEmpty ? item.title : item.note,
+                    symbol: item.kind == .note ? "text.quote" : "photo"
+                )
+            case .link:
+                linkCard
+            case .file:
+                fileCard
+            }
         }
     }
 
@@ -437,7 +455,7 @@ struct ItemRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            ItemPreview(item: item, compact: true)
+            ItemPreview(item: item, size: .thumbnail)
                 .frame(width: 58, height: 58)
                 .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
                 .overlay {
