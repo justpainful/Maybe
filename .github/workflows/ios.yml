@@ -38,6 +38,29 @@ jobs:
             -derivedDataPath DerivedData \
             -resultBundlePath artifacts/MaybeTests.xcresult
 
+      - name: Package unsigned device IPA
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project Maybe.xcodeproj \
+            -scheme Maybe \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath DerivedDataDevice \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+          APP_PATH=$(find DerivedDataDevice/Build/Products/Release-iphoneos -maxdepth 2 -name Maybe.app -print -quit)
+          test -n "$APP_PATH"
+          mkdir -p artifacts/ipa/Payload
+          ditto "$APP_PATH" artifacts/ipa/Payload/Maybe.app
+          (
+            cd artifacts/ipa
+            ditto -c -k --sequesterRsrc --keepParent Payload Maybe-current-unsigned.ipa
+            rm -rf Payload
+          )
+
       - name: Capture simulator screenshots
         run: |
           set -euo pipefail
