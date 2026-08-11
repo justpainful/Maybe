@@ -169,6 +169,7 @@ private struct MaybeTabBar: View {
             tabButton(.search)
         }
         .padding(6)
+        .background(Color.white.opacity(0.22), in: Capsule())
         .glassEffect(.regular, in: Capsule())
         .overlay(Capsule().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
         .shadow(color: MaybePalette.ink.opacity(0.14), radius: 6, y: 4)

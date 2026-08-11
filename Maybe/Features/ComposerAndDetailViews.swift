@@ -294,7 +294,7 @@ struct AddMaybeSheet: View {
                 .accessibilityIdentifier("choose-photos-button")
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         ForEach(photoDrafts) { draft in
                             photoThumbnail(draft)
                         }
@@ -306,7 +306,7 @@ struct AddMaybeSheet: View {
                                 Image(systemName: "plus")
                                     .font(.system(size: 20, weight: .bold))
                                     .foregroundStyle(MaybePalette.ink)
-                                    .frame(width: 96, height: 118)
+                                    .frame(width: 84, height: 106)
                                     .background {
                                         RoundedRectangle(cornerRadius: 18, style: .continuous)
                                             .fill(MaybePalette.blue.opacity(0.16))
@@ -336,7 +336,7 @@ struct AddMaybeSheet: View {
         Image(uiImage: draft.preview)
             .resizable()
             .aspectRatio(contentMode: .fill)
-            .frame(width: 96, height: 118)
+            .frame(width: 84, height: 106)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -907,11 +907,12 @@ struct ItemDetailView: View {
             TabView {
                 ForEach(Array(images.enumerated()), id: \.element.id) { index, attachment in
                     photoPage(attachment, index: index, count: images.count)
+                        .padding(.bottom, 34)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .always))
             .indexViewStyle(.page(backgroundDisplayMode: .always))
-            .frame(height: heroHeight + 30)
+            .frame(height: heroHeight + 34)
             .padding(.top, 4)
         }
     }
@@ -933,6 +934,11 @@ struct ItemDetailView: View {
                 prefersOriginal: true,
                 contentMode: .fit
             )
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(MaybePalette.hairline, lineWidth: 1)
+            }
             .frame(maxWidth: .infinity)
             .padding(.horizontal, MaybeMetrics.pageInset)
         }
@@ -1120,10 +1126,8 @@ struct SurpriseView: View {
                     .accessibilityLabel("Close")
                 }
 
-                Color.clear
-                    .aspectRatio(currentItem.previewAspect, contentMode: .fit)
-                    .frame(maxHeight: 470)
-                    .overlay { ItemPreview(item: currentItem, prefersOriginal: true) }
+                ItemPreview(item: currentItem, prefersOriginal: true, contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: 470)
                     .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 26, style: .continuous)

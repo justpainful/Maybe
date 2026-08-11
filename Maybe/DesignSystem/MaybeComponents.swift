@@ -273,13 +273,15 @@ struct ItemPreview: View {
     let item: SavedItem
     var prefersOriginal = false
     var compact = false
+    var contentMode: ContentMode = .fill
 
     var body: some View {
         if let image = item.primaryImage {
             LocalAttachmentImage(
                 attachment: image,
                 accessibilityTitle: item.title,
-                prefersOriginal: prefersOriginal
+                prefersOriginal: prefersOriginal,
+                contentMode: contentMode
             )
         } else {
             contentCard
@@ -309,9 +311,10 @@ struct ItemPreview: View {
                 .font(.system(size: compact ? 13 : 16, weight: .bold))
                 .foregroundStyle(MaybePalette.ink.opacity(0.45))
             Text(text)
-                .font(.system(size: compact ? 14 : 18, weight: .semibold, design: .rounded))
+                .font(.system(size: compact ? 14 : 17, weight: .semibold, design: .rounded))
                 .foregroundStyle(MaybePalette.ink)
-                .lineLimit(compact ? 3 : 6)
+                .lineLimit(compact ? 3 : 5)
+                .minimumScaleFactor(0.75)
                 .multilineTextAlignment(.leading)
             Spacer(minLength: 0)
         }
@@ -465,23 +468,28 @@ struct IdeaCard: View {
     let idea: Idea
     var compact = false
 
-    private var coverItems: [SavedItem] {
-        guard let coverID = idea.coverItemID,
-              let cover = idea.items.first(where: { $0.id == coverID }) else {
-            return Array(idea.items.prefix(3))
-        }
-        return [cover] + idea.items.filter { $0.id != coverID }.prefix(2)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             cover
-                .frame(height: compact ? 118 : 150)
+                .frame(height: compact ? 118 : 168)
                 .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: MaybeMetrics.tileRadius, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: MaybeMetrics.tileRadius, style: .continuous)
                         .strokeBorder(MaybePalette.hairline, lineWidth: 1)
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if idea.items.count > 1 {
+                        Text("+\(idea.items.count - 1)")
+                            .font(.system(size: 12, weight: .black, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(MaybePalette.ink)
+                            .padding(.horizontal, 9)
+                            .frame(height: 26)
+                            .background(Color.white.opacity(0.55), in: Capsule())
+                            .glassEffect(.regular, in: Capsule())
+                            .padding(9)
+                    }
                 }
                 .shadow(color: MaybePalette.ink.opacity(0.10), radius: 1, y: 2)
 
@@ -500,41 +508,18 @@ struct IdeaCard: View {
         .contentShape(Rectangle())
     }
 
+    /// One cover, filling the band. Collages of three squashed thumbnails made
+    /// every idea look the same and cut their contents in half.
     @ViewBuilder
     private var cover: some View {
-        let tint = Color(hex: idea.accentHex)
-        switch coverItems.count {
-        case 0:
+        if let item = idea.coverItem {
+            ItemPreview(item: item)
+        } else {
             ZStack {
-                tint.opacity(0.34)
-                Image(systemName: "lightbulb.max")
-                    .font(.system(size: 26, weight: .bold))
+                Color(hex: idea.accentHex).opacity(0.34)
+                Image(systemName: "lightbulb")
+                    .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(MaybePalette.ink.opacity(0.45))
-            }
-        case 1:
-            ItemPreview(item: coverItems[0])
-        case 2:
-            HStack(spacing: 2) {
-                ForEach(coverItems) { item in
-                    ItemPreview(item: item, compact: true)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                }
-            }
-        default:
-            HStack(spacing: 2) {
-                ItemPreview(item: coverItems[0])
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                VStack(spacing: 2) {
-                    ItemPreview(item: coverItems[1], compact: true)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                    ItemPreview(item: coverItems[2], compact: true)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                }
-                .frame(width: 76)
             }
         }
     }

@@ -499,29 +499,65 @@ enum SamplePhotoFactory {
         var generator = SeededGenerator(seed: UInt64(abs(seed) &+ 7) &* 2_654_435_761)
         let base = palette[abs(seed) % palette.count]
 
+        let partner = palette[(abs(seed) + 3) % palette.count]
+
         let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
             let cgContext = context.cgContext
             let bounds = CGRect(origin: .zero, size: size)
+
             canvas.setFill()
             cgContext.fill(bounds)
-            base.withAlphaComponent(0.20).setFill()
-            cgContext.fill(bounds)
 
-            let shapeCount = 3 + Int(generator.next() % 3)
+            if let gradient = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: [
+                    base.withAlphaComponent(0.92).cgColor,
+                    partner.withAlphaComponent(0.92).cgColor,
+                ] as CFArray,
+                locations: [0, 1]
+            ) {
+                cgContext.drawLinearGradient(
+                    gradient,
+                    start: .zero,
+                    end: CGPoint(x: size.width, y: size.height),
+                    options: []
+                )
+            }
+
+            let shapeCount = 4 + Int(generator.next() % 3)
             for index in 0..<shapeCount {
                 let color = palette[(abs(seed) + index + 1) % palette.count]
-                let shapeWidth = size.width * CGFloat(0.30 + Double(generator.next() % 35) / 100)
-                let shapeHeight = size.height * CGFloat(0.22 + Double(generator.next() % 35) / 100)
-                let originX = CGFloat(Double(generator.next() % 100) / 100) * size.width - shapeWidth * 0.35
-                let originY = CGFloat(Double(generator.next() % 100) / 100) * size.height - shapeHeight * 0.35
+                let shapeWidth = size.width * CGFloat(0.26 + Double(generator.next() % 34) / 100)
+                let shapeHeight = size.height * CGFloat(0.20 + Double(generator.next() % 34) / 100)
+                let originX = CGFloat(Double(generator.next() % 80) / 100) * size.width - shapeWidth * 0.15
+                let originY = CGFloat(Double(generator.next() % 80) / 100) * size.height - shapeHeight * 0.15
                 let rect = CGRect(x: originX, y: originY, width: shapeWidth, height: shapeHeight)
-                let radius = min(shapeWidth, shapeHeight) * (index.isMultiple(of: 2) ? 0.5 : 0.16)
+                let radius = min(shapeWidth, shapeHeight) * (index.isMultiple(of: 2) ? 0.5 : 0.14)
                 let path = UIBezierPath(roundedRect: rect, cornerRadius: radius)
-                color.withAlphaComponent(0.88).setFill()
+                color.withAlphaComponent(0.9).setFill()
                 path.fill()
-                UIColor.white.withAlphaComponent(0.55).setStroke()
-                path.lineWidth = max(2, min(size.width, size.height) * 0.012)
+                UIColor.white.withAlphaComponent(0.42).setStroke()
+                path.lineWidth = max(2, min(size.width, size.height) * 0.01)
                 path.stroke()
+            }
+
+            // A soft top-light and a darker floor, so these read as photographs
+            // of objects rather than flat swatches.
+            if let sheen = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: [
+                    UIColor.white.withAlphaComponent(0.34).cgColor,
+                    UIColor.white.withAlphaComponent(0).cgColor,
+                    UIColor.black.withAlphaComponent(0.22).cgColor,
+                ] as CFArray,
+                locations: [0, 0.55, 1]
+            ) {
+                cgContext.drawLinearGradient(
+                    sheen,
+                    start: .zero,
+                    end: CGPoint(x: 0, y: size.height),
+                    options: []
+                )
             }
         }
         return image.jpegData(compressionQuality: 0.9)

@@ -292,21 +292,17 @@ struct InboxView: View {
     }
 
     private var filterRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(InboxFilter.allCases) { option in
-                    Button {
-                        filter = option
-                    } label: {
-                        TagChip(name: option.title, color: option.color, selected: filter == option)
-                    }
-                    .buttonStyle(PressableStyle(scale: 0.95))
-                    .accessibilityIdentifier("filter-\(option.id)")
+        FlowLayout(spacing: 8, rowSpacing: 8) {
+            ForEach(InboxFilter.allCases) { option in
+                Button {
+                    filter = option
+                } label: {
+                    TagChip(name: option.title, color: option.color, selected: filter == option)
                 }
+                .buttonStyle(PressableStyle(scale: 0.95))
+                .accessibilityIdentifier("filter-\(option.id)")
             }
-            .padding(.vertical, 3)
         }
-        .contentMargins(.horizontal, 0, for: .scrollContent)
     }
 
     private var deleteBinding: Binding<Bool> {
@@ -481,20 +477,17 @@ struct LibrarySearchView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(SearchScope.allCases) { option in
-                            Button {
-                                scope = option
-                            } label: {
-                                TagChip(name: option.title, color: option.color, selected: scope == option)
-                            }
-                            .buttonStyle(PressableStyle(scale: 0.95))
+                FlowLayout(spacing: 8, rowSpacing: 8) {
+                    ForEach(SearchScope.allCases) { option in
+                        Button {
+                            scope = option
+                        } label: {
+                            TagChip(name: option.title, color: option.color, selected: scope == option)
                         }
+                        .buttonStyle(PressableStyle(scale: 0.95))
+                        .accessibilityIdentifier("scope-\(option.id)")
                     }
-                    .padding(.vertical, 3)
                 }
-                .contentMargins(.horizontal, 0, for: .scrollContent)
 
                 if itemResults.isEmpty && ideaResults.isEmpty {
                     EmptyLibraryView(

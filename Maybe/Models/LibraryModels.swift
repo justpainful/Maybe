@@ -230,13 +230,13 @@ extension SavedItem {
         }
     }
 
-    /// One line of context for compact rows: the thought if there is one,
-    /// otherwise where it came from.
+    /// One line of context for compact rows: the thought if there is one, then
+    /// where it came from. Never a storage filename we made up ourselves.
     var subtitleLine: String {
         if !note.isEmpty { return note }
         if let hostName { return hostName }
-        if let filename = media.first?.originalFilename { return filename }
-        return kind.title
+        if kind == .file, let filename = media.first?.originalFilename { return filename }
+        return createdAt.formatted(date: .abbreviated, time: .omitted)
     }
 }
 
