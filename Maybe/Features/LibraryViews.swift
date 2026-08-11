@@ -10,14 +10,14 @@ struct HomeView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 30) {
+            LazyVStack(alignment: .leading, spacing: MaybeMetrics.sectionSpacing) {
                 MaybeHeader(trailingAction: onSettings)
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Things that caught you.")
-                        .font(.maybeRounded(30, weight: .black))
+                        .font(.maybeRounded(28, weight: .black))
                     Text("Keep them close. Turn them into ideas.")
-                        .font(.body)
+                        .font(.subheadline)
                         .foregroundStyle(MaybePalette.ink.opacity(0.58))
                 }
 
@@ -26,9 +26,9 @@ struct HomeView: View {
                 againSection
                 surpriseSection
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 12)
-            .padding(.bottom, 118)
+            .padding(.horizontal, MaybeMetrics.pageInset)
+            .padding(.top, 10)
+            .padding(.bottom, 28)
         }
         .background(CreamCanvas())
         .toolbar(.hidden, for: .navigationBar)
@@ -62,7 +62,7 @@ struct HomeView: View {
                     .padding(.vertical, 8)
                 }
                 .scrollEdgeEffectHidden(true, for: .all)
-                .contentMargins(.horizontal, 2, for: .scrollContent)
+                .scrollClipDisabled()
             }
         }
     }
@@ -92,6 +92,7 @@ struct HomeView: View {
                     .padding(.vertical, 8)
                 }
                 .scrollEdgeEffectHidden(true, for: .all)
+                .scrollClipDisabled()
             }
         }
     }
@@ -159,7 +160,8 @@ struct InboxView: View {
     @State private var selectedKind: MaybeKind?
     @State private var favoritesOnly = false
 
-    private let columns = [GridItem(.adaptive(minimum: 158), spacing: 14)]
+    private let columns = [GridItem(.adaptive(minimum: 150), spacing: 12)]
+    private let filterColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
 
     private var items: [SavedItem] {
         allItems.filter { item in
@@ -175,16 +177,17 @@ struct InboxView: View {
                 HStack(alignment: .lastTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Inbox")
-                            .font(.maybeRounded(36, weight: .black))
+                            .font(.maybeRounded(32, weight: .black))
                         Text("\(allItems.filter(\.isInbox).count) new things")
                             .foregroundStyle(MaybePalette.ink.opacity(0.56))
                     }
                     Spacer()
                     Image(systemName: "tray.full.fill")
-                        .font(.title2)
-                        .frame(width: 52, height: 48)
-                        .background(MaybePalette.blue.opacity(0.7), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-                        .maybeGlass(cornerRadius: 17, tint: MaybePalette.blue.opacity(0.3))
+                        .font(.system(size: 19, weight: .bold))
+                        .frame(width: 46, height: 44)
+                        .background(MaybePalette.blue.opacity(0.82), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(Color.white.opacity(0.8), lineWidth: 1))
+                        .shadow(color: MaybePalette.ink.opacity(0.12), radius: 1, y: 3)
                 }
 
                 filters
@@ -201,46 +204,42 @@ struct InboxView: View {
                             NavigationLink {
                                 ItemDetailView(item: item)
                             } label: {
-                                SavedCard(item: item, width: 170)
+                                SavedCard(item: item, width: nil)
                             }
                             .buttonStyle(.plain)
                         }
                     }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 118)
+            .padding(.horizontal, MaybeMetrics.pageInset)
+            .padding(.top, 12)
+            .padding(.bottom, 28)
         }
         .background(CreamCanvas())
         .toolbar(.hidden, for: .navigationBar)
     }
 
     private var filters: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+        LazyVGrid(columns: filterColumns, spacing: 9) {
+            Button {
+                selectedKind = nil
+                favoritesOnly = false
+            } label: {
+                FilterKeycap(name: "All", color: MaybePalette.yellow, selected: selectedKind == nil && !favoritesOnly)
+            }
+            Button {
+                favoritesOnly.toggle()
+            } label: {
+                FilterKeycap(name: "Favorites", color: MaybePalette.coral, selected: favoritesOnly)
+            }
+            ForEach(MaybeKind.allCases) { kind in
                 Button {
-                    selectedKind = nil
-                    favoritesOnly = false
+                    selectedKind = selectedKind == kind ? nil : kind
                 } label: {
-                    TagChip(name: "All", color: MaybePalette.yellow, selected: selectedKind == nil && !favoritesOnly)
-                }
-                Button {
-                    favoritesOnly.toggle()
-                } label: {
-                    TagChip(name: "Favorites", color: MaybePalette.coral, selected: favoritesOnly)
-                }
-                ForEach(MaybeKind.allCases) { kind in
-                    Button {
-                        selectedKind = selectedKind == kind ? nil : kind
-                    } label: {
-                        TagChip(name: kind.title, color: Color(hex: accent(for: kind)), selected: selectedKind == kind)
-                    }
+                    FilterKeycap(name: kind.title, color: Color(hex: accent(for: kind)), selected: selectedKind == kind)
                 }
             }
-            .padding(.vertical, 5)
         }
-        .scrollEdgeEffectHidden(true, for: .all)
         .buttonStyle(.plain)
     }
 
@@ -266,7 +265,7 @@ struct IdeasView: View {
                 HStack(alignment: .lastTextBaseline) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Ideas")
-                            .font(.maybeRounded(36, weight: .black))
+                            .font(.maybeRounded(32, weight: .black))
                         Text("Saved things, put to work.")
                             .foregroundStyle(MaybePalette.ink.opacity(0.56))
                     }
@@ -297,12 +296,34 @@ struct IdeasView: View {
                     }
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 118)
+            .padding(.horizontal, MaybeMetrics.pageInset)
+            .padding(.top, 12)
+            .padding(.bottom, 28)
         }
         .background(CreamCanvas())
         .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+private struct FilterKeycap: View {
+    let name: String
+    let color: Color
+    let selected: Bool
+
+    var body: some View {
+        Text(name)
+            .font(.system(.caption, design: .rounded, weight: .bold))
+            .foregroundStyle(MaybePalette.ink)
+            .frame(maxWidth: .infinity)
+            .frame(height: 38)
+            .background((selected ? color : color.opacity(0.58)), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay(alignment: .top) {
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(Color.white.opacity(0.82), lineWidth: 1)
+                    .padding(1)
+            }
+            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(MaybePalette.ink.opacity(selected ? 0.2 : 0.1), lineWidth: 1))
+            .shadow(color: MaybePalette.ink.opacity(0.12), radius: 0.5, y: selected ? 3 : 2)
     }
 }
 
@@ -310,6 +331,7 @@ struct LibrarySearchView: View {
     @Query(sort: \SavedItem.createdAt, order: .reverse) private var items: [SavedItem]
     @State private var searchText = ""
     @State private var selectedKind: MaybeKind?
+    private let filterColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
 
     private var results: [SavedItem] {
         items.filter { item in
@@ -330,27 +352,23 @@ struct LibrarySearchView: View {
     var body: some View {
         List {
             Section {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
+                LazyVGrid(columns: filterColumns, spacing: 9) {
+                    Button {
+                        selectedKind = nil
+                    } label: {
+                        FilterKeycap(name: "All", color: MaybePalette.yellow, selected: selectedKind == nil)
+                    }
+                    ForEach(MaybeKind.allCases) { kind in
                         Button {
-                            selectedKind = nil
+                            selectedKind = selectedKind == kind ? nil : kind
                         } label: {
-                            TagChip(name: "Everything", color: MaybePalette.yellow, selected: selectedKind == nil)
-                        }
-                        ForEach(MaybeKind.allCases) { kind in
-                            Button {
-                                selectedKind = selectedKind == kind ? nil : kind
-                            } label: {
-                                TagChip(name: kind.title, color: MaybePalette.accents[kindIndex(kind)], selected: selectedKind == kind)
-                            }
+                            FilterKeycap(name: kind.title, color: MaybePalette.accents[kindIndex(kind)], selected: selectedKind == kind)
                         }
                     }
-                    .padding(.vertical, 8)
                 }
-                .scrollEdgeEffectHidden(true, for: .all)
                 .buttonStyle(.plain)
                 .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets())
+                .listRowInsets(EdgeInsets(top: 8, leading: MaybeMetrics.pageInset, bottom: 8, trailing: MaybeMetrics.pageInset))
             }
 
             if results.isEmpty {

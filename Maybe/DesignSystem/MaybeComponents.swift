@@ -7,11 +7,11 @@ struct MaybeWordmark: View {
     var body: some View {
         HStack(spacing: -1) {
             Text("ma")
-            Text("y").offset(y: 2)
+            Text("y").offset(y: 1.5)
             Text("be")
         }
         .font(.maybeRounded(size, weight: .black))
-        .tracking(-1.8)
+        .tracking(-1.45)
         .foregroundStyle(MaybePalette.ink)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("maybe")
@@ -22,13 +22,24 @@ struct MaybeMark: View {
     var size: CGFloat = 48
 
     var body: some View {
-        let gap = size * 0.07
-        let tile = (size - gap) / 2
+        let gap = size * 0.055
+        let innerSize = size * 0.58
+        let tile = (innerSize - gap) / 2
+        let radius = size * 0.24
 
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
-                .fill(Color.white.opacity(0.34))
-                .maybeGlass(cornerRadius: size * 0.25)
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(Color.white.opacity(0.32))
+                .glassEffect(.regular, in: RoundedRectangle(cornerRadius: radius, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.92), lineWidth: max(1, size * 0.025))
+                        .padding(1)
+                }
+                .overlay {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(MaybePalette.ink.opacity(0.09), lineWidth: 0.75)
+                }
 
             VStack(spacing: gap) {
                 HStack(spacing: gap) {
@@ -46,9 +57,10 @@ struct MaybeMark: View {
                         .frame(width: tile, height: tile, alignment: .topLeading)
                 }
             }
-            .padding(size * 0.13)
+            .frame(width: innerSize, height: innerSize)
         }
         .frame(width: size, height: size)
+        .shadow(color: MaybePalette.ink.opacity(0.12), radius: 2, y: 3)
         .accessibilityHidden(true)
     }
 
@@ -58,10 +70,14 @@ struct MaybeMark: View {
             .frame(width: size, height: size)
             .overlay(alignment: .top) {
                 RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-                    .stroke(Color.white.opacity(0.72), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.84), lineWidth: 0.9)
                     .padding(1)
             }
-            .shadow(color: MaybePalette.ink.opacity(0.18), radius: 1, y: 2)
+            .overlay {
+                RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
+                    .stroke(MaybePalette.ink.opacity(0.12), lineWidth: 0.65)
+            }
+            .shadow(color: MaybePalette.ink.opacity(0.18), radius: 0.5, y: 1.5)
     }
 }
 
@@ -70,8 +86,8 @@ struct MaybeHeader: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            MaybeMark(size: 44)
-            MaybeWordmark(size: 34)
+            MaybeMark(size: 48)
+            MaybeWordmark(size: 32)
             Spacer()
             if let trailingAction {
                 Button(action: trailingAction) {
@@ -124,10 +140,14 @@ struct TagChip: View {
             .foregroundStyle(MaybePalette.ink)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background((selected ? color : color.opacity(0.52)), in: Capsule())
-            .maybeGlass(cornerRadius: 18, tint: selected ? color.opacity(0.42) : nil)
-            .overlay(Capsule().stroke(MaybePalette.ink.opacity(selected ? 0.22 : 0.1), lineWidth: 1))
-            .shadow(color: MaybePalette.ink.opacity(0.09), radius: 1, y: 2)
+            .background((selected ? color : color.opacity(0.62)), in: Capsule())
+            .overlay(alignment: .top) {
+                Capsule()
+                    .stroke(Color.white.opacity(0.76), lineWidth: 1)
+                    .padding(1)
+            }
+            .overlay(Capsule().stroke(MaybePalette.ink.opacity(selected ? 0.22 : 0.12), lineWidth: 1))
+            .shadow(color: MaybePalette.ink.opacity(0.12), radius: 0.5, y: 2)
     }
 }
 
@@ -147,15 +167,28 @@ struct FlowTags: View {
     }
 }
 
+struct TagGrid: View {
+    let tags: [String]
+    var accent: Color = MaybePalette.green
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 8)], alignment: .leading, spacing: 8) {
+            ForEach(tags, id: \.self) { tag in
+                TagChip(name: tag, color: accent.opacity(0.7))
+            }
+        }
+    }
+}
+
 struct SavedCard: View {
     let item: SavedItem
-    var width: CGFloat = 188
+    var width: CGFloat? = 166
 
     var body: some View {
         VStack(alignment: .leading, spacing: 11) {
             InspirationThumbnail(item: item)
-                .frame(height: 154)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .frame(height: width.map { max(130, $0 * 0.82) } ?? 142)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .top, spacing: 6) {
@@ -178,11 +211,12 @@ struct SavedCard: View {
             }
             .padding(.horizontal, 3)
         }
-        .padding(9)
+        .padding(8)
         .frame(width: width, alignment: .leading)
-        .background(Color.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).stroke(Color.white.opacity(0.82), lineWidth: 1))
-        .shadow(color: MaybePalette.ink.opacity(0.1), radius: 8, y: 5)
+        .background(Color.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.9), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(MaybePalette.ink.opacity(0.06), lineWidth: 0.75))
+        .shadow(color: MaybePalette.ink.opacity(0.13), radius: 2, y: 4)
     }
 }
 
@@ -285,7 +319,7 @@ struct InspirationThumbnail: View {
             .foregroundStyle(MaybePalette.ink)
             .frame(width: 54, height: 48)
             .background(color.opacity(0.72), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-            .maybeGlass(cornerRadius: 17, tint: color.opacity(0.35))
+            .overlay(RoundedRectangle(cornerRadius: 17, style: .continuous).stroke(Color.white.opacity(0.75), lineWidth: 1))
             .shadow(color: MaybePalette.ink.opacity(0.15), radius: 2, y: 3)
     }
 
@@ -334,10 +368,11 @@ struct IdeaCard: View {
             }
         }
         .padding(10)
-        .frame(width: compact ? 212 : 256, alignment: .leading)
+        .frame(width: compact ? 212 : nil, alignment: .leading)
+        .frame(maxWidth: compact ? 212 : .infinity, alignment: .leading)
         .background(Color.white.opacity(0.45), in: RoundedRectangle(cornerRadius: 29, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 29, style: .continuous).stroke(Color.white.opacity(0.8), lineWidth: 1))
-        .shadow(color: MaybePalette.ink.opacity(0.1), radius: 8, y: 5)
+        .shadow(color: MaybePalette.ink.opacity(0.13), radius: 2, y: 4)
     }
 }
 

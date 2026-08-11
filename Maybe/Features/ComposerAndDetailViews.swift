@@ -23,6 +23,7 @@ struct AddMaybeSheet: View {
     @State private var errorMessage: String?
 
     private let mediaStore = LocalMediaStore()
+    private let typeColumns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 2)
 
     private var recentTags: [String] {
         var seen = Set<String>()
@@ -38,37 +39,46 @@ struct AddMaybeSheet: View {
             ZStack {
                 CreamCanvas()
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 25) {
+                    VStack(alignment: .leading, spacing: 20) {
                         typePicker
                         contentInput
                         thoughtInput
                         tagsInput
-
-                        Button(action: save) {
-                            HStack {
-                                if isSaving {
-                                    ProgressView().tint(MaybePalette.ink)
-                                } else {
-                                    Image(systemName: "arrow.down.to.line.compact")
-                                }
-                                Text(isSaving ? "Saving…" : "Save to Inbox")
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(KeycapButtonStyle(color: MaybePalette.yellow, cornerRadius: 22))
-                        .disabled(isSaving)
-                        .accessibilityIdentifier("save-maybe-button")
                     }
-                    .padding(20)
-                    .padding(.bottom, 24)
+                    .padding(.horizontal, MaybeMetrics.pageInset)
+                    .padding(.top, 14)
+                    .padding(.bottom, 18)
                 }
             }
             .navigationTitle("Add to Maybe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark")
+                    }
+                    .accessibilityLabel("Close")
                 }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Button(action: save) {
+                    HStack {
+                        if isSaving {
+                            ProgressView().tint(MaybePalette.ink)
+                        } else {
+                            Image(systemName: "arrow.down.to.line.compact")
+                        }
+                        Text(isSaving ? "Saving…" : "Save to Inbox")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(KeycapButtonStyle(color: MaybePalette.yellow, cornerRadius: 20, depth: 3))
+                .disabled(isSaving)
+                .accessibilityIdentifier("save-maybe-button")
+                .padding(.horizontal, MaybeMetrics.pageInset)
+                .padding(.top, 10)
+                .padding(.bottom, 8)
+                .background(.ultraThinMaterial)
             }
             .fileImporter(
                 isPresented: $isChoosingFile,
@@ -103,31 +113,28 @@ struct AddMaybeSheet: View {
     private var typePicker: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("What are you keeping?")
-                .font(.maybeRounded(22, weight: .bold))
+                .font(.maybeRounded(21, weight: .bold))
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(MaybeKind.allCases) { option in
-                        Button {
-                            withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
-                                kind = option
-                            }
-                        } label: {
-                            Label(option.title, systemImage: option.symbol)
+            LazyVGrid(columns: typeColumns, spacing: 10) {
+                ForEach(MaybeKind.allCases) { option in
+                    Button {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
+                            kind = option
                         }
-                        .buttonStyle(
-                            KeycapButtonStyle(
-                                color: kind == option ? accent(for: option) : MaybePalette.glassWhite,
-                                cornerRadius: 18,
-                                depth: 3
-                            )
-                        )
-                        .accessibilityIdentifier("kind-\(option.rawValue)")
+                    } label: {
+                        Label(option.title, systemImage: option.symbol)
+                            .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(
+                        KeycapButtonStyle(
+                            color: kind == option ? accent(for: option) : MaybePalette.glassWhite,
+                            cornerRadius: 17,
+                            depth: 3
+                        )
+                    )
+                    .accessibilityIdentifier("kind-\(option.rawValue)")
                 }
-                .padding(.bottom, 7)
             }
-            .scrollEdgeEffectHidden(true, for: .all)
         }
     }
 
@@ -193,7 +200,7 @@ struct AddMaybeSheet: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack(spacing: 7) {
                 Text("What caught you?")
-                    .font(.maybeRounded(22, weight: .bold))
+                    .font(.maybeRounded(21, weight: .bold))
                 Text("optional")
                     .font(.caption)
                     .foregroundStyle(MaybePalette.ink.opacity(0.45))
@@ -208,14 +215,14 @@ struct AddMaybeSheet: View {
     private var tagsInput: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Tags")
-                .font(.maybeRounded(22, weight: .bold))
+                .font(.maybeRounded(21, weight: .bold))
             inputCard {
                 TextField("UI, Glass, Motion", text: $tags)
                     .textInputAutocapitalization(.words)
             }
 
             if !recentTags.isEmpty {
-                FlowTags(tags: recentTags, accent: MaybePalette.green)
+                TagGrid(tags: recentTags, accent: MaybePalette.green)
             }
         }
     }

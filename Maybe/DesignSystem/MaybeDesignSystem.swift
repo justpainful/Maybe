@@ -14,6 +14,12 @@ enum MaybePalette {
     static let accentHexes = ["7957FF", "FFD83D", "70AEFF", "87E56D", "FF8066"]
 }
 
+enum MaybeMetrics {
+    static let pageInset: CGFloat = 18
+    static let sectionSpacing: CGFloat = 28
+    static let cardRadius: CGFloat = 24
+}
+
 extension Color {
     init(hex: String) {
         let cleaned = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
@@ -99,21 +105,20 @@ struct KeycapButtonStyle: ButtonStyle {
             .frame(minHeight: 50)
             .background {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(color.opacity(0.88))
+                    .fill(color.opacity(0.94))
                     .overlay(alignment: .top) {
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .stroke(Color.white.opacity(0.78), lineWidth: 1.4)
+                            .stroke(Color.white.opacity(0.9), lineWidth: 1.3)
                             .padding(1)
                     }
             }
-            .maybeGlass(cornerRadius: cornerRadius, tint: color.opacity(0.4), interactive: true)
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(MaybePalette.ink.opacity(0.16), lineWidth: 1)
+                    .stroke(MaybePalette.ink.opacity(0.18), lineWidth: 1)
             }
             .shadow(
-                color: MaybePalette.ink.opacity(configuration.isPressed ? 0.06 : 0.22),
-                radius: configuration.isPressed ? 1 : 2,
+                color: MaybePalette.ink.opacity(configuration.isPressed ? 0.06 : 0.2),
+                radius: configuration.isPressed ? 0 : 1,
                 y: configuration.isPressed ? 1 : depth
             )
             .offset(y: configuration.isPressed ? depth - 1 : 0)
@@ -131,10 +136,14 @@ struct RoundKeycapButtonStyle: ButtonStyle {
             .font(.system(size: size * 0.38, weight: .black, design: .rounded))
             .foregroundStyle(MaybePalette.ink)
             .frame(width: size, height: size)
-            .background(color.opacity(0.9), in: Circle())
-            .maybeGlass(cornerRadius: size / 2, tint: color.opacity(0.42), interactive: true)
-            .overlay(Circle().stroke(MaybePalette.ink.opacity(0.15), lineWidth: 1))
-            .shadow(color: MaybePalette.ink.opacity(configuration.isPressed ? 0.06 : 0.24), radius: 2, y: configuration.isPressed ? 1 : 4)
+            .background(color.opacity(0.96), in: Circle())
+            .overlay(alignment: .top) {
+                Circle()
+                    .stroke(Color.white.opacity(0.9), lineWidth: 1.3)
+                    .padding(1)
+            }
+            .overlay(Circle().stroke(MaybePalette.ink.opacity(0.17), lineWidth: 1))
+            .shadow(color: MaybePalette.ink.opacity(configuration.isPressed ? 0.06 : 0.22), radius: 1, y: configuration.isPressed ? 1 : 4)
             .offset(y: configuration.isPressed ? 3 : 0)
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)

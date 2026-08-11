@@ -64,6 +64,21 @@ jobs:
           sleep 3
           xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/inbox.png
 
+          xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
+          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --show-ideas
+          sleep 3
+          xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/ideas.png
+
+          xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
+          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --show-search
+          sleep 3
+          xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/search.png
+
+          xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
+          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --show-settings
+          sleep 3
+          xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/settings.png
+
       - name: Upload CI artifacts
         if: always()
         uses: actions/upload-artifact@v4
