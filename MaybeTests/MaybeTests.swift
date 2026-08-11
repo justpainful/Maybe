@@ -92,6 +92,61 @@ struct MaybeTests {
         #expect(try container.mainContext.fetch(FetchDescriptor<SavedItem>()).count == 1)
     }
 
+    @Test("One Maybe holds several photos, in order, at their real sizes")
+    @MainActor
+    func severalPhotosAttachToOneItem() throws {
+        let schema = Schema(versionedSchema: MaybeSchemaV1.self)
+        let container = try ModelContainer(
+            for: schema,
+            migrationPlan: MaybeMigrationPlan.self,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let item = SavedItem(kind: .photo, title: "A few photos")
+        container.mainContext.insert(item)
+
+        let sizes = [(300, 400), (400, 300), (250, 250)]
+        let payloads = sizes.enumerated().compactMap { index, size in
+            SamplePhotoFactory.jpeg(width: size.0, height: size.1, seed: index)
+        }
+        #expect(payloads.count == 3)
+
+        try LibraryMutationService.addPhotos(payloads, to: item, in: container.mainContext)
+
+        #expect(item.imageCount == 3)
+        #expect(item.images.map(\.width) == [300, 400, 250])
+        #expect(item.images.map(\.height) == [400, 300, 250])
+        #expect(item.previewAspect == MediaAspect.ratio(width: 300, height: 400))
+
+        // The same photo twice is still one photo.
+        try LibraryMutationService.addPhotos([payloads[0]], to: item, in: container.mainContext)
+        #expect(item.imageCount == 3)
+
+        let removed = try #require(item.images.first)
+        try LibraryMutationService.removeMedia(removed, from: item, in: container.mainContext)
+        #expect(item.imageCount == 2)
+        #expect(item.images.map(\.width) == [400, 250])
+    }
+
+    @Test("A tile never gets a shape extreme enough to break the grid")
+    func previewAspectIsClamped() {
+        #expect(MediaAspect.ratio(width: 100, height: 1_000) == MediaAspect.minimum)
+        #expect(MediaAspect.ratio(width: 1_000, height: 100) == MediaAspect.maximum)
+        #expect(MediaAspect.ratio(width: 0, height: 0) == 1)
+        #expect(SavedItem(kind: .note, title: "No media").previewAspect == 0.88)
+    }
+
+    @Test("Photo filenames sort into the order they were added")
+    func photoFilenamesSortByAdditionOrder() {
+        let earlier = Date(timeIntervalSince1970: 1_000_000)
+        let later = earlier.addingTimeInterval(60)
+        let first = LocalMediaStore.photoFilename(index: 0, date: earlier)
+        let second = LocalMediaStore.photoFilename(index: 1, date: earlier)
+        let third = LocalMediaStore.photoFilename(index: 2, date: later)
+
+        #expect(first < second)
+        #expect(second < third)
+    }
+
     @Test("Library backup is a package with JSON and media folders")
     @MainActor
     func libraryPackageRoundTrip() throws {

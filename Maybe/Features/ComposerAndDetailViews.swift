@@ -1127,13 +1127,13 @@ struct SurpriseView: View {
                 }
 
                 ItemPreview(item: currentItem, prefersOriginal: true, contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: 470)
                     .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
                     .overlay {
                         RoundedRectangle(cornerRadius: 26, style: .continuous)
                             .strokeBorder(MaybePalette.hairline, lineWidth: 1)
                     }
                     .shadow(color: MaybePalette.ink.opacity(0.12), radius: 2, y: 3)
+                    .frame(maxWidth: .infinity, maxHeight: 470)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(currentItem.title)

@@ -9,6 +9,7 @@ struct HomeView: View {
     @State private var surpriseItem: SavedItem?
     @State private var launchDetailItem: SavedItem?
     @State private var launchDetailIdea: Idea?
+    @State private var launchEditItem: SavedItem?
 
     let onSettings: () -> Void
     let onAdd: () -> Void
@@ -67,6 +68,10 @@ struct HomeView: View {
                         }
                     }
             }
+        }
+        .sheet(item: $launchEditItem) { item in
+            EditItemSheet(item: item)
+                .presentationDetents([.large])
         }
         .onChange(of: items.count, initial: true) { _, _ in
             openLaunchRouteIfNeeded()
@@ -173,6 +178,8 @@ struct HomeView: View {
             launchDetailItem = items.first { $0.imageCount > 1 } ?? items.first
         } else if arguments.contains("--show-idea-detail"), launchDetailIdea == nil {
             launchDetailIdea = ideas.first
+        } else if arguments.contains("--show-edit"), launchEditItem == nil {
+            launchEditItem = items.first { $0.imageCount > 1 } ?? items.first
         }
     }
 }

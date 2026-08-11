@@ -106,6 +106,7 @@ jobs:
           shoot 08-add-empty --use-sample-data --show-add
           shoot 09-add-filled --use-sample-data --show-add --qa-composer-photos
           shoot 10-new-idea --use-sample-data --show-new-idea
+          shoot 10b-edit-item --use-sample-data --show-edit
           shoot 11-surprise --use-sample-data --show-surprise
           shoot 12-settings --use-sample-data --show-settings
 
