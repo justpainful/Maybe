@@ -33,8 +33,6 @@ struct AppShellView: View {
         let arguments = ProcessInfo.processInfo.arguments
         let initialSheet: AppSheet? = if arguments.contains("--show-add") {
             .add
-        } else if arguments.contains("--show-new-idea") {
-            .newIdea(nil)
         } else if arguments.contains("--show-settings") {
             .settings
         } else {
@@ -105,6 +103,10 @@ struct AppShellView: View {
         }
         .task {
             isShowingStartupIssue = startupIssue != nil
+            if ProcessInfo.processInfo.arguments.contains("--show-new-idea") {
+                try? await Task.sleep(for: .milliseconds(350))
+                presentedSheet = .newIdea(nil)
+            }
         }
         .alert("Local library unavailable", isPresented: $isShowingStartupIssue) {
             Button("OK", role: .cancel) {}
