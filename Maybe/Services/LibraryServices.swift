@@ -364,7 +364,7 @@ enum LibraryArchiveService {
                         thumbnailFiles[name] = FileWrapper(regularFileWithContents: data)
                         return name
                     }
-                    MediaRecord(
+                    return MediaRecord(
                         id: attachment.id,
                         type: attachment.typeRawValue,
                         originalFilename: attachment.originalFilename,
