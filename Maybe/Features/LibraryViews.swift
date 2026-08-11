@@ -51,13 +51,8 @@ struct HomeView: View {
                     }
             }
         }
-        .task {
-            let arguments = ProcessInfo.processInfo.arguments
-            if arguments.contains("--show-surprise"), surpriseItem == nil {
-                surpriseItem = ResurfacingEngine.pick(from: items)
-            } else if arguments.contains("--show-detail"), launchDetailItem == nil {
-                launchDetailItem = items.first
-            }
+        .onChange(of: items.count, initial: true) { _, _ in
+            openLaunchRouteIfNeeded()
         }
     }
 
@@ -77,6 +72,16 @@ struct HomeView: View {
             .buttonBorderShape(.roundedRectangle(radius: 20))
             .tint(MaybePalette.purple)
             .foregroundStyle(MaybePalette.ink)
+        }
+    }
+
+    private func openLaunchRouteIfNeeded() {
+        guard !items.isEmpty else { return }
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--show-surprise"), surpriseItem == nil {
+            surpriseItem = ResurfacingEngine.pick(from: items)
+        } else if arguments.contains("--show-detail"), launchDetailItem == nil {
+            launchDetailItem = items.first
         }
     }
 
