@@ -225,38 +225,18 @@ struct SavedCard: View {
 struct InspirationThumbnail: View {
     let item: SavedItem
     var prefersOriginal = false
-    private let mediaStore = LocalMediaStore()
-    @State private var loadedImage: UIImage?
 
     var body: some View {
-        Group {
-            if let attachment = item.media.first,
-               attachment.type == .image,
-               let image = loadedImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .accessibilityLabel(item.title)
-            } else {
-                generatedArtwork
-                    .accessibilityLabel("Preview for \(item.title)")
-            }
+        if let attachment = item.media.first, attachment.type == .image {
+            LocalAttachmentImage(
+                attachment: attachment,
+                accessibilityTitle: item.title,
+                prefersOriginal: prefersOriginal
+            )
+        } else {
+            generatedArtwork
+                .accessibilityLabel("Preview for \(item.title)")
         }
-        .task(id: imagePath) {
-            loadedImage = nil
-            guard let imagePath else { return }
-            let url = mediaStore.url(at: imagePath)
-            let data = await Task.detached(priority: .utility) {
-                try? Data(contentsOf: url, options: [.mappedIfSafe])
-            }.value
-            guard !Task.isCancelled, let data else { return }
-            loadedImage = UIImage(data: data)
-        }
-    }
-
-    private var imagePath: String? {
-        guard let attachment = item.media.first, attachment.type == .image else { return nil }
-        return prefersOriginal ? attachment.localPath : (attachment.thumbnailPath ?? attachment.localPath)
     }
 
     @ViewBuilder
@@ -353,6 +333,45 @@ struct InspirationThumbnail: View {
             .background(color, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(MaybePalette.ink.opacity(0.6), lineWidth: 1.2))
             .shadow(color: MaybePalette.ink.opacity(0.35), radius: 0, y: 5)
+    }
+}
+
+struct LocalAttachmentImage: View {
+    let attachment: MediaAttachment
+    let accessibilityTitle: String
+    var prefersOriginal = false
+
+    @State private var loadedImage: UIImage?
+    private let mediaStore = LocalMediaStore()
+
+    var body: some View {
+        Group {
+            if let loadedImage {
+                Image(uiImage: loadedImage)
+                    .resizable()
+                    .scaledToFill()
+                    .accessibilityLabel(accessibilityTitle)
+            } else {
+                ZStack {
+                    MaybePalette.ink.opacity(0.06)
+                    ProgressView()
+                }
+                .accessibilityLabel("Loading \(accessibilityTitle)")
+            }
+        }
+        .task(id: imagePath) {
+            loadedImage = nil
+            let url = mediaStore.url(at: imagePath)
+            let data = await Task.detached(priority: .utility) {
+                try? Data(contentsOf: url, options: [.mappedIfSafe])
+            }.value
+            guard !Task.isCancelled, let data else { return }
+            loadedImage = UIImage(data: data)
+        }
+    }
+
+    private var imagePath: String {
+        prefersOriginal ? attachment.localPath : (attachment.thumbnailPath ?? attachment.localPath)
     }
 }
 

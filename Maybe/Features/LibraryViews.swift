@@ -5,6 +5,7 @@ struct HomeView: View {
     @Query(sort: \SavedItem.createdAt, order: .reverse) private var items: [SavedItem]
     @Query(sort: \Idea.modifiedAt, order: .reverse) private var ideas: [Idea]
     @State private var surpriseItem: SavedItem?
+    @State private var launchDetailItem: SavedItem?
 
     let onSettings: () -> Void
     let onAdd: () -> Void
@@ -39,6 +40,24 @@ struct HomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(item: $surpriseItem) { item in
             SurpriseView(initialItem: item)
+        }
+        .fullScreenCover(item: $launchDetailItem) { item in
+            NavigationStack {
+                ItemDetailView(item: item)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Done") { launchDetailItem = nil }
+                        }
+                    }
+            }
+        }
+        .task {
+            let arguments = ProcessInfo.processInfo.arguments
+            if arguments.contains("--show-surprise"), surpriseItem == nil {
+                surpriseItem = ResurfacingEngine.pick(from: items)
+            } else if arguments.contains("--show-detail"), launchDetailItem == nil {
+                launchDetailItem = items.first
+            }
         }
     }
 
@@ -433,10 +452,13 @@ private struct FilterKeycap: View {
 
 struct LibrarySearchView: View {
     @Query(sort: \SavedItem.createdAt, order: .reverse) private var items: [SavedItem]
+    @Query(sort: \Idea.modifiedAt, order: .reverse) private var ideas: [Idea]
     @State private var searchText = ""
     @State private var selectedKind: MaybeKind?
+    @State private var showsIdeas = false
 
     private var results: [SavedItem] {
+        guard !showsIdeas else { return [] }
         items.filter { item in
             let matchesKind = selectedKind == nil || item.kind == selectedKind
             guard matchesKind else { return false }
@@ -454,6 +476,21 @@ struct LibrarySearchView: View {
         }
     }
 
+    private var ideaResults: [Idea] {
+        guard showsIdeas else { return [] }
+        return ideas.filter { idea in
+            guard !searchText.isEmpty else { return true }
+            let haystack = [
+                idea.title,
+                idea.note,
+                idea.tagNames.joined(separator: " "),
+                idea.items.map(\.title).joined(separator: " "),
+                idea.modifiedAt.formatted(date: .long, time: .omitted),
+            ].joined(separator: " ")
+            return haystack.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
     var body: some View {
         List {
             Section {
@@ -461,15 +498,23 @@ struct LibrarySearchView: View {
                     HStack(spacing: 9) {
                         Button {
                             selectedKind = nil
+                            showsIdeas = false
                         } label: {
-                            FilterKeycap(name: "All", color: MaybePalette.yellow, selected: selectedKind == nil)
+                            FilterKeycap(name: "All", color: MaybePalette.yellow, selected: selectedKind == nil && !showsIdeas)
                         }
                         ForEach(MaybeKind.allCases) { kind in
                             Button {
                                 selectedKind = selectedKind == kind ? nil : kind
+                                showsIdeas = false
                             } label: {
                                 FilterKeycap(name: kind.title, color: accent(for: kind), selected: selectedKind == kind)
                             }
+                        }
+                        Button {
+                            selectedKind = nil
+                            showsIdeas = true
+                        } label: {
+                            FilterKeycap(name: "Ideas", color: MaybePalette.purple, selected: showsIdeas)
                         }
                     }
                     .padding(.vertical, 5)
@@ -479,13 +524,39 @@ struct LibrarySearchView: View {
                 .listRowInsets(EdgeInsets(top: 8, leading: MaybeMetrics.pageInset, bottom: 8, trailing: MaybeMetrics.pageInset))
             }
 
-            if results.isEmpty {
+            if results.isEmpty && ideaResults.isEmpty {
                 EmptyLibraryView(
                     symbol: "magnifyingglass",
                     title: "No match",
                     message: "Try a title, thought, source, tag, or idea name."
                 )
                 .listRowBackground(Color.clear)
+            } else if showsIdeas {
+                Section("\(ideaResults.count) ideas") {
+                    ForEach(ideaResults) { idea in
+                        NavigationLink {
+                            IdeaDetailView(idea: idea)
+                        } label: {
+                            HStack(spacing: 13) {
+                                Image(systemName: "lightbulb.max.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(MaybePalette.ink)
+                                    .frame(width: 54, height: 50)
+                                    .background(Color(hex: idea.accentHex).opacity(0.55), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                                    .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(idea.title)
+                                        .font(.system(.headline, design: .rounded, weight: .bold))
+                                    Text("Inspired by \(idea.items.count) things")
+                                        .font(.caption)
+                                        .foregroundStyle(MaybePalette.ink.opacity(0.56))
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    }
+                    .listRowBackground(Color.white.opacity(0.35))
+                }
             } else {
                 Section("\(results.count) results") {
                     ForEach(results) { item in

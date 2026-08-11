@@ -14,12 +14,14 @@ struct AddMaybeSheet: View {
     @State private var thought = ""
     @State private var sourceURL = ""
     @State private var tags = ""
-    @State private var photoSelection: PhotosPickerItem?
+    @State private var photoSelections: [PhotosPickerItem] = []
+    @State private var photoPayloads: [Data] = []
     @State private var payload: Data?
     @State private var payloadFilename: String?
     @State private var isChoosingFile = false
     @State private var isSaving = false
-    @State private var duplicateTitle: String?
+    @State private var duplicateItem: SavedItem?
+    @State private var duplicatePreview: SavedItem?
     @State private var errorMessage: String?
 
     private let mediaStore = LocalMediaStore()
@@ -71,7 +73,7 @@ struct AddMaybeSheet: View {
                 .buttonBorderShape(.roundedRectangle(radius: 18))
                 .tint(MaybePalette.yellow)
                 .foregroundStyle(MaybePalette.ink)
-                .disabled(isSaving)
+                .disabled(isSaving || !canSave)
                 .accessibilityIdentifier("save-maybe-button")
                 .padding(.horizontal, MaybeMetrics.pageInset)
                 .padding(.top, 8)
@@ -84,26 +86,44 @@ struct AddMaybeSheet: View {
                 allowsMultipleSelection: false,
                 onCompletion: importFile
             )
-            .onChange(of: photoSelection) { _, newValue in
-                guard let newValue else { return }
+            .onChange(of: photoSelections) { _, selections in
                 Task {
                     do {
-                        payload = try await newValue.loadTransferable(type: Data.self)
-                        payloadFilename = "Maybe-photo.jpg"
+                        var loaded: [Data] = []
+                        for selection in selections {
+                            if let data = try await selection.loadTransferable(type: Data.self) {
+                                loaded.append(data)
+                            }
+                        }
+                        photoPayloads = loaded
                     } catch {
                         errorMessage = error.localizedDescription
                     }
                 }
             }
             .alert("Already in Maybe", isPresented: duplicateAlertBinding) {
-                Button("Open it later", role: .cancel) {}
+                Button("Open existing") {
+                    duplicatePreview = duplicateItem
+                    duplicateItem = nil
+                }
+                Button("Cancel", role: .cancel) { duplicateItem = nil }
             } message: {
-                Text("This file is already saved as “\(duplicateTitle ?? "an existing Maybe")”.")
+                Text("This is already saved as “\(duplicateItem?.title ?? "an existing Maybe")”.")
             }
             .alert("Couldn’t save", isPresented: errorAlertBinding) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "Please try again.")
+            }
+            .fullScreenCover(item: $duplicatePreview) { item in
+                NavigationStack {
+                    ItemDetailView(item: item)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("Done") { duplicatePreview = nil }
+                            }
+                        }
+                }
             }
         }
     }
@@ -165,12 +185,12 @@ struct AddMaybeSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             switch kind {
             case .photo:
-                let isReady = payload != nil
-                PhotosPicker(selection: $photoSelection, matching: .images) {
+                let isReady = !photoPayloads.isEmpty
+                PhotosPicker(selection: $photoSelections, maxSelectionCount: 12, matching: .images) {
                     MaybePickerSurface(
                         symbol: isReady ? "checkmark.circle.fill" : "photo.badge.plus",
-                        title: isReady ? "Photo ready" : "Choose a photo",
-                        subtitle: isReady ? "Tap to choose another" : "It stays on this device",
+                        title: isReady ? "\(photoPayloads.count) photo\(photoPayloads.count == 1 ? "" : "s") ready" : "Choose photos",
+                        subtitle: isReady ? "Tap to change selection" : "Up to 12, kept on this device",
                         color: MaybePalette.blue
                     )
                 }
@@ -302,9 +322,24 @@ struct AddMaybeSheet: View {
 
     private var duplicateAlertBinding: Binding<Bool> {
         Binding(
-            get: { duplicateTitle != nil },
-            set: { if !$0 { duplicateTitle = nil } }
+            get: { duplicateItem != nil },
+            set: { if !$0 { duplicateItem = nil } }
         )
+    }
+
+    private var canSave: Bool {
+        switch kind {
+        case .photo:
+            !photoPayloads.isEmpty
+        case .link:
+            guard let url = URL(string: sourceURL.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
+            return ["http", "https"].contains(url.scheme?.lowercased() ?? "")
+        case .note:
+            return !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !thought.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .file:
+            return payload != nil
+        }
     }
 
     private var errorAlertBinding: Binding<Bool> {
@@ -331,11 +366,27 @@ struct AddMaybeSheet: View {
         defer { isSaving = false }
 
         do {
-            if let payload {
-                let hash = LocalMediaStore.hash(payload)
-                let attachments = try modelContext.fetch(FetchDescriptor<MediaAttachment>())
-                if let duplicate = attachments.first(where: { $0.sha256 == hash }) {
-                    duplicateTitle = duplicate.item?.title ?? duplicate.originalFilename
+            let attachments = try modelContext.fetch(FetchDescriptor<MediaAttachment>())
+            let pendingPayloads = kind == .photo ? photoPayloads : payload.map { [$0] } ?? []
+            for candidate in pendingPayloads {
+                let hash = LocalMediaStore.hash(candidate)
+                if let duplicate = attachments.first(where: { $0.sha256 == hash }),
+                   let existingItem = duplicate.item {
+                    duplicateItem = existingItem
+                    return
+                }
+            }
+
+            if kind == .link {
+                let normalizedURL = sourceURL.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                    .lowercased()
+                if let existingItem = existingItems.first(where: {
+                    ($0.sourceURLString ?? "")
+                        .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                        .lowercased() == normalizedURL
+                }) {
+                    duplicateItem = existingItem
                     return
                 }
             }
@@ -361,9 +412,11 @@ struct AddMaybeSheet: View {
             )
             modelContext.insert(item)
 
-            if let payload {
+            for (index, payload) in pendingPayloads.enumerated() {
                 let mediaKind: MediaKind = kind == .photo ? .image : .file
-                let filename = payloadFilename ?? "attachment"
+                let filename = kind == .photo
+                    ? "Maybe-photo-\(index + 1).jpg"
+                    : (payloadFilename ?? "attachment")
                 let path = try mediaStore.write(payload, filename: filename, kind: mediaKind)
                 let image = UIImage(data: payload)
                 let attachment = MediaAttachment(
@@ -655,16 +708,7 @@ struct ItemDetailView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                Button {
-                    previewAttachment = item.media.first
-                } label: {
-                    InspirationThumbnail(item: item, prefersOriginal: true)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 420)
-                        .clipped()
-                }
-                .buttonStyle(.plain)
-                .disabled(item.media.isEmpty)
+                mediaHero
 
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -821,6 +865,43 @@ struct ItemDetailView: View {
         }
         .sheet(item: $previewAttachment) { attachment in
             LocalMediaPreview(attachment: attachment, title: item.title)
+        }
+    }
+
+    @ViewBuilder
+    private var mediaHero: some View {
+        let images = item.media.filter { $0.type == .image }
+        if images.count > 1 {
+            TabView {
+                ForEach(Array(images.enumerated()), id: \.element.id) { index, attachment in
+                    Button {
+                        previewAttachment = attachment
+                    } label: {
+                        LocalAttachmentImage(
+                            attachment: attachment,
+                            accessibilityTitle: "\(item.title), photo \(index + 1) of \(images.count)",
+                            prefersOriginal: true
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 420)
+                        .clipped()
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(height: 420)
+            .tabViewStyle(.page(indexDisplayMode: .always))
+        } else {
+            Button {
+                previewAttachment = item.media.first
+            } label: {
+                InspirationThumbnail(item: item, prefersOriginal: true)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 420)
+                    .clipped()
+            }
+            .buttonStyle(.plain)
+            .disabled(item.media.isEmpty)
         }
     }
 

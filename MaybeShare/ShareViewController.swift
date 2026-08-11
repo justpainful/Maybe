@@ -48,90 +48,144 @@ final class ShareCaptureModel: ObservableObject {
     @Published var selectedIdea = ""
     @Published var isLoading = true
     @Published var errorMessage: String?
+    @Published var itemCount = 0
+
+    private var drafts: [LoadedShare] = []
 
     let ideaTitles = MaybeSharedContainer.publishedIdeaTitles
 
     func load(from context: NSExtensionContext?) {
         guard let extensionItem = context?.inputItems.first as? NSExtensionItem,
               let providers = extensionItem.attachments,
-              let provider = providers.first else {
+              !providers.isEmpty else {
             isLoading = false
             return
         }
 
-        if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
-            kindRawValue = "photo"
-            title = provider.suggestedName ?? "A photo that caught me"
-            originalFilename = provider.suggestedName.map { "\($0).jpg" } ?? "shared-photo.jpg"
-            _ = provider.loadDataRepresentation(for: .image) { [weak self] data, error in
-                Task { @MainActor in
-                    self?.payload = data
-                    self?.errorMessage = error?.localizedDescription
-                    self?.isLoading = false
+        Task {
+            var loaded: [LoadedShare] = []
+            for provider in providers {
+                if let draft = await load(provider) {
+                    loaded.append(draft)
                 }
             }
-            return
+            drafts = loaded
+            itemCount = loaded.count
+            if let first = loaded.first {
+                kindRawValue = first.kindRawValue
+                title = first.title
+                sourceURLString = first.sourceURLString
+                originalFilename = first.originalFilename
+                payload = first.payload
+            }
+            if loaded.isEmpty, errorMessage == nil {
+                errorMessage = "Maybe couldn’t read these shared items."
+            }
+            isLoading = false
+        }
+    }
+
+    private func load(_ provider: NSItemProvider) async -> LoadedShare? {
+        if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+            let name = provider.suggestedName ?? "A photo that caught me"
+            return await withCheckedContinuation { continuation in
+                _ = provider.loadDataRepresentation(for: .image) { data, error in
+                    continuation.resume(returning: data.map {
+                        LoadedShare(
+                            kindRawValue: "photo",
+                            title: name,
+                            originalFilename: provider.suggestedName.map { "\($0).jpg" } ?? "shared-photo.jpg",
+                            payload: $0
+                        )
+                    })
+                    if let error {
+                        Task { @MainActor [weak self] in self?.errorMessage = error.localizedDescription }
+                    }
+                }
+            }
         }
 
         if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier) {
-            kindRawValue = "link"
-            provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { [weak self] value, error in
-                let urlString = (value as? URL)?.absoluteString ?? (value as? String)
-                Task { @MainActor in
-                    self?.sourceURLString = urlString
-                    self?.title = URL(string: urlString ?? "")?.host() ?? "A link worth keeping"
-                    self?.errorMessage = error?.localizedDescription
-                    self?.isLoading = false
+            return await withCheckedContinuation { continuation in
+                provider.loadItem(forTypeIdentifier: UTType.url.identifier, options: nil) { value, error in
+                    let urlString = (value as? URL)?.absoluteString ?? (value as? String)
+                    continuation.resume(returning: urlString.map {
+                        LoadedShare(
+                            kindRawValue: "link",
+                            title: URL(string: $0)?.host() ?? "A link worth keeping",
+                            sourceURLString: $0
+                        )
+                    })
+                    if let error {
+                        Task { @MainActor [weak self] in self?.errorMessage = error.localizedDescription }
+                    }
                 }
             }
-            return
-        }
-
-        if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
-            kindRawValue = "note"
-            provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { [weak self] value, error in
-                let text = (value as? String) ?? ""
-                Task { @MainActor in
-                    self?.title = text.isEmpty ? "A thought" : text
-                    self?.errorMessage = error?.localizedDescription
-                    self?.isLoading = false
-                }
-            }
-            return
         }
 
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-            kindRawValue = "file"
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { [weak self] value, error in
-                let fileURL = value as? URL
-                let data = fileURL.flatMap { try? Data(contentsOf: $0) }
-                let filename = fileURL?.lastPathComponent
-                Task { @MainActor in
-                    self?.payload = data
-                    self?.originalFilename = filename
-                    self?.title = filename ?? "A saved file"
-                    self?.errorMessage = error?.localizedDescription
-                    self?.isLoading = false
+            return await withCheckedContinuation { continuation in
+                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { value, error in
+                    let fileURL = value as? URL
+                    let data = fileURL.flatMap { try? Data(contentsOf: $0) }
+                    let filename = fileURL?.lastPathComponent
+                    continuation.resume(returning: data.map {
+                        LoadedShare(
+                            kindRawValue: "file",
+                            title: filename ?? "A saved file",
+                            originalFilename: filename,
+                            payload: $0
+                        )
+                    })
+                    if let error {
+                        Task { @MainActor [weak self] in self?.errorMessage = error.localizedDescription }
+                    }
                 }
             }
-            return
         }
 
-        isLoading = false
+        if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
+            return await withCheckedContinuation { continuation in
+                provider.loadItem(forTypeIdentifier: UTType.plainText.identifier, options: nil) { value, error in
+                    let sharedText = (value as? String) ?? ""
+                    continuation.resume(returning: LoadedShare(
+                        kindRawValue: "note",
+                        title: sharedText.isEmpty ? "A thought" : sharedText
+                    ))
+                    if let error {
+                        Task { @MainActor [weak self] in self?.errorMessage = error.localizedDescription }
+                    }
+                }
+            }
+        }
+
+        return nil
     }
 
     func save() throws {
+        guard !drafts.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
         let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let record = SharedCaptureRecord(
-            kindRawValue: kindRawValue,
-            title: normalizedTitle.isEmpty ? "Shared with Maybe" : normalizedTitle,
-            thought: thought.trimmingCharacters(in: .whitespacesAndNewlines),
-            sourceURLString: sourceURLString,
-            originalFilename: originalFilename,
-            ideaTitle: selectedIdea.isEmpty ? nil : selectedIdea
-        )
-        try MaybeSharedContainer.enqueue(record, payload: payload)
+        let normalizedThought = thought.trimmingCharacters(in: .whitespacesAndNewlines)
+        for (index, draft) in drafts.enumerated() {
+            let record = SharedCaptureRecord(
+                kindRawValue: draft.kindRawValue,
+                title: index == 0 && !normalizedTitle.isEmpty ? normalizedTitle : draft.title,
+                thought: normalizedThought,
+                sourceURLString: draft.sourceURLString,
+                originalFilename: draft.originalFilename,
+                ideaTitle: selectedIdea.isEmpty ? nil : selectedIdea
+            )
+            try MaybeSharedContainer.enqueue(record, payload: draft.payload)
+        }
     }
+}
+
+private struct LoadedShare: Sendable {
+    let kindRawValue: String
+    let title: String
+    var sourceURLString: String? = nil
+    var originalFilename: String? = nil
+    var payload: Data? = nil
 }
 
 private struct ShareCaptureView: View {
@@ -148,7 +202,7 @@ private struct ShareCaptureView: View {
                 HStack {
                     Button("Cancel", action: onCancel)
                     Spacer()
-                    Text("Add to Maybe")
+                    Text(model.itemCount > 1 ? "Add \(model.itemCount) to Maybe" : "Add to Maybe")
                         .font(.system(.headline, design: .rounded, weight: .bold))
                     Spacer()
                     Color.clear.frame(width: 52, height: 1)
@@ -209,10 +263,19 @@ private struct ShareCaptureView: View {
 
     private var preview: some View {
         HStack(spacing: 14) {
-            Image(systemName: previewSymbol)
-                .font(.system(size: 27, weight: .bold))
-                .frame(width: 62, height: 60)
-                .background(previewColor, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            Group {
+                if model.kindRawValue == "photo", let data = model.payload, let image = UIImage(data: data) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Image(systemName: previewSymbol)
+                        .font(.system(size: 27, weight: .bold))
+                        .background(previewColor)
+                }
+            }
+            .frame(width: 62, height: 60)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             VStack(alignment: .leading, spacing: 4) {
                 Text(model.title)
                     .font(.system(.headline, design: .rounded, weight: .bold))
@@ -220,6 +283,11 @@ private struct ShareCaptureView: View {
                 Text(model.kindRawValue.capitalized)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if model.itemCount > 1 {
+                    Text("+ \(model.itemCount - 1) more")
+                        .font(.caption.bold())
+                        .foregroundStyle(.secondary)
+                }
             }
             Spacer()
         }

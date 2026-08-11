@@ -73,6 +73,13 @@ jobs:
           APP_PATH=$(find DerivedData/Build/Products/Debug-iphonesimulator -maxdepth 2 -name Maybe.app -print -quit)
           xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
 
+          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe
+          sleep 3
+          xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/empty-home.png
+          xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
+          xcrun simctl uninstall "$SIMULATOR_UDID" com.justpainful.Maybe
+          xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
+
           xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --use-sample-data
           sleep 5
           xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/home.png
@@ -81,6 +88,11 @@ jobs:
           xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --use-sample-data --show-add
           sleep 3
           xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/add-sheet.png
+
+          xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
+          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --use-sample-data --show-new-idea
+          sleep 3
+          xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/new-idea.png
 
           xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
           xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --use-sample-data --show-inbox
@@ -101,6 +113,16 @@ jobs:
           xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --use-sample-data --show-settings
           sleep 3
           xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/settings.png
+
+          xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
+          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --use-sample-data --show-detail
+          sleep 3
+          xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/detail.png
+
+          xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
+          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --use-sample-data --show-surprise
+          sleep 3
+          xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/surprise.png
 
       - name: Upload CI artifacts
         if: always()

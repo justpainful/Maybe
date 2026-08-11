@@ -33,6 +33,8 @@ struct AppShellView: View {
         let arguments = ProcessInfo.processInfo.arguments
         let initialSheet: AppSheet? = if arguments.contains("--show-add") {
             .add
+        } else if arguments.contains("--show-new-idea") {
+            .newIdea(nil)
         } else if arguments.contains("--show-settings") {
             .settings
         } else {
