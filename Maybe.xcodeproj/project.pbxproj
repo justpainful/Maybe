@@ -23,6 +23,7 @@
 		B00000000000000000000013 /* MaybeShare.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A00000000000000000000022 /* MaybeShare.appex */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		B00000000000000000000014 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000014 /* ShareViewController.swift */; };
 		B00000000000000000000015 /* SharedCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000012 /* SharedCapture.swift */; };
+		B00000000000000000000016 /* MaybeDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000004 /* MaybeDesignSystem.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -358,6 +359,7 @@
 			files = (
 				B00000000000000000000014 /* ShareViewController.swift in Sources */,
 				B00000000000000000000015 /* SharedCapture.swift in Sources */,
+				B00000000000000000000016 /* MaybeDesignSystem.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

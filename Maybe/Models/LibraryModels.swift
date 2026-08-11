@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import SwiftData
 
@@ -189,84 +190,61 @@ final class MediaAttachment: Identifiable {
     }
 }
 
-enum SampleLibrarySeeder {
-    @MainActor
-    static func seedIfNeeded(in context: ModelContext) {
-        var descriptor = FetchDescriptor<SavedItem>()
-        descriptor.fetchLimit = 1
-        guard (try? context.fetch(descriptor))?.isEmpty == true else { return }
+// MARK: - Presentation helpers
 
-        let now = Date.now
-        let samples = [
-            SavedItem(
-                kind: .photo,
-                title: "Floating glass controls",
-                note: "The controls feel light, but still tactile.",
-                createdAt: now.addingTimeInterval(-900),
-                sourceURLString: "https://pinterest.com",
-                isInbox: true,
-                tagNames: ["UI", "Glass", "Controls"],
-                accentHex: "70AEFF",
-                visualSeed: 0
-            ),
-            SavedItem(
-                kind: .photo,
-                title: "Chunky keycaps",
-                note: "Borrow the press depth, not the keyboard layout.",
-                createdAt: now.addingTimeInterval(-7_200),
-                sourceURLString: "https://are.na",
-                isInbox: true,
-                tagNames: ["UI", "Motion"],
-                accentHex: "FFD83D",
-                visualSeed: 1
-            ),
-            SavedItem(
-                kind: .link,
-                title: "Playful typography notes",
-                note: "Rounded headlines with quieter body copy.",
-                createdAt: now.addingTimeInterval(-86_400 * 4),
-                sourceURLString: "https://developer.apple.com/design",
-                isFavorite: true,
-                isInbox: false,
-                tagNames: ["Typography", "Brand"],
-                accentHex: "FF8066",
-                visualSeed: 2
-            ),
-            SavedItem(
-                kind: .note,
-                title: "What caught you?",
-                note: "A prompt is more useful than an empty Notes field.",
-                createdAt: now.addingTimeInterval(-86_400 * 18),
-                isInbox: false,
-                tagNames: ["Product", "Writing"],
-                accentHex: "87E56D",
-                visualSeed: 3
-            ),
-            SavedItem(
-                kind: .photo,
-                title: "Warm cream canvas",
-                note: "Let saved images be the loudest part of the screen.",
-                createdAt: now.addingTimeInterval(-86_400 * 92),
-                lastViewedAt: now.addingTimeInterval(-86_400 * 70),
-                isFavorite: true,
-                isInbox: false,
-                tagNames: ["Color", "Maybe"],
-                accentHex: "7957FF",
-                visualSeed: 4
-            ),
-        ]
+extension SavedItem {
+    /// Photos in the order they were added. Media filenames carry a sortable
+    /// timestamp prefix, so this stays stable across launches.
+    var images: [MediaAttachment] {
+        media
+            .filter { $0.type == .image }
+            .sorted { $0.originalFilename < $1.originalFilename }
+    }
 
-        samples.forEach(context.insert)
+    var primaryImage: MediaAttachment? { images.first }
 
-        let idea = Idea(
-            title: "Maybe app UI",
-            note: "A local place where saved things turn into something.",
-            coverItemID: samples[0].id,
-            tagNames: ["Maybe", "UI"],
-            accentHex: "7957FF",
-            items: [samples[0], samples[1], samples[2]]
-        )
-        context.insert(idea)
-        try? context.save()
+    var imageCount: Int { images.count }
+
+    var hostName: String? {
+        guard let sourceURLString, let host = URL(string: sourceURLString)?.host() else { return nil }
+        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+    }
+
+    var fileExtension: String? {
+        let name = media.first?.originalFilename ?? ""
+        let ext = (name as NSString).pathExtension
+        return ext.isEmpty ? nil : ext.uppercased()
+    }
+
+    /// The proportion a preview should be drawn at. Photos keep their own shape,
+    /// so nothing is ever cropped to fill a grid cell.
+    var previewAspect: CGFloat {
+        if let image = primaryImage, image.width > 0, image.height > 0 {
+            return MediaAspect.ratio(width: image.width, height: image.height)
+        }
+        switch kind {
+        case .note: return 0.88
+        case .link: return 1.3
+        case .file: return 1.3
+        case .photo: return 1
+        }
+    }
+
+    /// One line of context for compact rows: the thought if there is one,
+    /// otherwise where it came from.
+    var subtitleLine: String {
+        if !note.isEmpty { return note }
+        if let hostName { return hostName }
+        if let filename = media.first?.originalFilename { return filename }
+        return kind.title
+    }
+}
+
+extension Idea {
+    var coverItem: SavedItem? {
+        if let coverItemID, let match = items.first(where: { $0.id == coverItemID }) {
+            return match
+        }
+        return items.first
     }
 }

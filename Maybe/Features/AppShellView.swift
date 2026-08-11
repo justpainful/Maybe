@@ -6,6 +6,42 @@ enum AppTab: Hashable {
     case inbox
     case ideas
     case search
+
+    var title: String {
+        switch self {
+        case .home: "Home"
+        case .inbox: "Inbox"
+        case .ideas: "Ideas"
+        case .search: "Find"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .home: "square.grid.2x2"
+        case .inbox: "tray"
+        case .ideas: "lightbulb"
+        case .search: "magnifyingglass"
+        }
+    }
+
+    var selectedSymbol: String {
+        switch self {
+        case .home: "square.grid.2x2.fill"
+        case .inbox: "tray.fill"
+        case .ideas: "lightbulb.fill"
+        case .search: "magnifyingglass"
+        }
+    }
+
+    var accent: Color {
+        switch self {
+        case .home: MaybePalette.coral
+        case .inbox: MaybePalette.blue
+        case .ideas: MaybePalette.yellow
+        case .search: MaybePalette.green
+        }
+    }
 }
 
 enum AppSheet: Identifiable {
@@ -52,7 +88,9 @@ struct AppShellView: View {
     }
 
     var body: some View {
-        Group {
+        ZStack {
+            CreamCanvas()
+
             switch selectedTab {
             case .home:
                 NavigationStack {
@@ -63,13 +101,11 @@ struct AppShellView: View {
                 }
             case .inbox:
                 NavigationStack {
-                    InboxView()
+                    InboxView(onAdd: { presentedSheet = .add })
                 }
             case .ideas:
                 NavigationStack {
-                    IdeasView {
-                        presentedSheet = .newIdea(nil)
-                    }
+                    IdeasView { presentedSheet = .newIdea(nil) }
                 }
             case .search:
                 NavigationStack {
@@ -81,24 +117,20 @@ struct AppShellView: View {
             MaybeTabBar(selection: $selectedTab) {
                 presentedSheet = .add
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 7)
-            .padding(.bottom, 6)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 4)
         }
         .sheet(item: $presentedSheet) { destination in
             switch destination {
             case .add:
                 AddMaybeSheet()
                     .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
             case .newIdea(let item):
                 NewIdeaSheet(preselectedItem: item)
                     .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
             case .settings:
                 SettingsView()
                     .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
             }
         }
         .task {
@@ -122,62 +154,50 @@ private struct MaybeTabBar: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            tabButton(.home, title: "Home", symbol: "house", selectedSymbol: "house.fill", color: MaybePalette.coral)
-            tabButton(.inbox, title: "Inbox", symbol: "tray", selectedSymbol: "tray.full.fill", color: MaybePalette.blue)
+            tabButton(.home)
+            tabButton(.inbox)
 
             Button(action: onAdd) {
                 Image(systemName: "plus")
-                    .font(.system(size: 20, weight: .bold))
-                    .frame(width: 34, height: 34)
             }
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.circle)
-            .tint(MaybePalette.purple)
-            .foregroundStyle(MaybePalette.ink)
+            .buttonStyle(RoundKeycapButtonStyle(color: MaybePalette.purple, size: 50, depth: 4))
+            .padding(.horizontal, 4)
             .accessibilityLabel("Add to Maybe")
             .accessibilityIdentifier("add-button")
 
-            tabButton(.ideas, title: "Ideas", symbol: "lightbulb.max", selectedSymbol: "lightbulb.max.fill", color: MaybePalette.yellow)
-            tabButton(.search, title: "Find", symbol: "magnifyingglass", selectedSymbol: "magnifyingglass", color: MaybePalette.green)
+            tabButton(.ideas)
+            tabButton(.search)
         }
-        .padding(7)
-        .background(Color.white.opacity(0.18), in: Capsule())
+        .padding(6)
         .glassEffect(.regular, in: Capsule())
-        .overlay(Capsule().strokeBorder(Color.white.opacity(0.84), lineWidth: 1))
-        .shadow(color: MaybePalette.ink.opacity(0.16), radius: 7, y: 5)
+        .overlay(Capsule().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
+        .shadow(color: MaybePalette.ink.opacity(0.14), radius: 6, y: 4)
     }
 
-    private func tabButton(
-        _ tab: AppTab,
-        title: String,
-        symbol: String,
-        selectedSymbol: String,
-        color: Color
-    ) -> some View {
-        Button {
-            withAnimation(.snappy(duration: 0.24)) {
-                selection = tab
-            }
+    private func tabButton(_ tab: AppTab) -> some View {
+        let isSelected = selection == tab
+        return Button {
+            withAnimation(.snappy(duration: 0.22)) { selection = tab }
         } label: {
-            VStack(spacing: 3) {
-                Image(systemName: selection == tab ? selectedSymbol : symbol)
-                    .font(.system(size: 18, weight: selection == tab ? .bold : .semibold))
+            VStack(spacing: 2) {
+                Image(systemName: isSelected ? tab.selectedSymbol : tab.symbol)
+                    .font(.system(size: 17, weight: isSelected ? .bold : .medium))
                     .symbolRenderingMode(.monochrome)
-                Text(title)
-                    .font(.system(size: 10.5, weight: .bold, design: .rounded))
+                Text(tab.title)
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
             }
             .foregroundStyle(MaybePalette.ink)
             .frame(maxWidth: .infinity)
             .frame(height: 46)
-            .background(selection == tab ? color.opacity(0.5) : .clear, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-            .overlay {
-                if selection == tab {
-                    RoundedRectangle(cornerRadius: 17, style: .continuous)
-                        .stroke(Color.white.opacity(0.75), lineWidth: 1)
+            .background {
+                if isSelected {
+                    KeycapSurface(color: tab.accent, cornerRadius: 15, depth: 2)
                 }
             }
+            .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
         }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selection == tab ? .isSelected : [])
+        .buttonStyle(PressableStyle(scale: 0.94))
+        .accessibilityIdentifier("tab-\(tab.title.lowercased())")
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

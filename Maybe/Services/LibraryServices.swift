@@ -78,6 +78,61 @@ struct LocalMediaStore {
     static func hash(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
+
+    /// Photo filenames carry a sortable timestamp so a gallery always shows
+    /// photos in the order they were added, without extra schema.
+    static func photoFilename(index: Int, date: Date = .now, fileExtension: String = "jpg") -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyyMMdd-HHmmssSSS"
+        return String(format: "Photo-%@-%02d.%@", formatter.string(from: date), index + 1, fileExtension)
+    }
+}
+
+// MARK: - Attaching media
+
+enum MediaIngest {
+    /// Writes a payload into the local media folder and links it to an item,
+    /// always recording real pixel dimensions so layouts can respect the shape.
+    @discardableResult
+    @MainActor
+    static func attach(
+        _ payload: Data,
+        kind: MediaKind,
+        filename: String,
+        to item: SavedItem,
+        mediaStore: LocalMediaStore = .init()
+    ) throws -> MediaAttachment {
+        let path = try mediaStore.write(payload, filename: filename, kind: kind)
+        let size = kind == .image ? pixelSize(of: payload) : .zero
+        let attachment = MediaAttachment(
+            type: kind,
+            localPath: path,
+            thumbnailPath: kind == .image ? try mediaStore.createThumbnail(from: payload) : nil,
+            width: Double(size.width),
+            height: Double(size.height),
+            originalFilename: filename,
+            sha256: LocalMediaStore.hash(payload),
+            item: item
+        )
+        item.media.append(attachment)
+        return attachment
+    }
+
+    static func pixelSize(of payload: Data) -> CGSize {
+        guard let source = CGImageSourceCreateWithData(payload as CFData, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
+            return .zero
+        }
+        let width = (properties[kCGImagePropertyPixelWidth] as? Double) ?? 0
+        let height = (properties[kCGImagePropertyPixelHeight] as? Double) ?? 0
+        let orientation = (properties[kCGImagePropertyOrientation] as? UInt32) ?? 1
+        // Orientations 5...8 are stored rotated; report the displayed shape.
+        return (5...8).contains(Int(orientation))
+            ? CGSize(width: height, height: width)
+            : CGSize(width: width, height: height)
+    }
 }
 
 enum LibraryMutationService {
@@ -130,6 +185,41 @@ enum LibraryMutationService {
         MaybeSharedContainer.publishIdeaTitles(
             (try context.fetch(FetchDescriptor<Idea>())).map(\.title)
         )
+    }
+
+    @MainActor
+    static func addPhotos(_ payloads: [Data], to item: SavedItem, in context: ModelContext) throws {
+        let existingHashes = Set(item.media.map(\.sha256))
+        var added = 0
+        for payload in payloads where !existingHashes.contains(LocalMediaStore.hash(payload)) {
+            try MediaIngest.attach(
+                payload,
+                kind: .image,
+                filename: LocalMediaStore.photoFilename(index: item.imageCount + added),
+                to: item
+            )
+            added += 1
+        }
+        guard added > 0 else { return }
+        item.modifiedAt = .now
+        try context.save()
+    }
+
+    @MainActor
+    static func removeMedia(
+        _ attachment: MediaAttachment,
+        from item: SavedItem,
+        in context: ModelContext,
+        mediaStore: LocalMediaStore = .init()
+    ) throws {
+        mediaStore.remove(at: attachment.localPath)
+        if let thumbnailPath = attachment.thumbnailPath {
+            mediaStore.remove(at: thumbnailPath)
+        }
+        item.media.removeAll { $0.id == attachment.id }
+        context.delete(attachment)
+        item.modifiedAt = .now
+        try context.save()
     }
 
     @MainActor
@@ -199,9 +289,9 @@ enum ShareInboxImporter {
 
         for capture in captures {
             let record = capture.record
-            let hash = capture.payload.map(LocalMediaStore.hash)
+            let hashes = capture.payloads.map(LocalMediaStore.hash)
 
-            if let hash, existingHashes.contains(hash) {
+            if !hashes.isEmpty, hashes.allSatisfy(existingHashes.contains) {
                 importedIDs.insert(record.id)
                 continue
             }
@@ -219,24 +309,19 @@ enum ShareInboxImporter {
             )
             context.insert(item)
 
-            if let payload = capture.payload, let hash {
-                let mediaKind: MediaKind = item.kind == .photo ? .image : .file
-                if let path = try? mediaStore.write(
+            let mediaKind: MediaKind = item.kind == .photo ? .image : .file
+            for (index, payload) in capture.payloads.enumerated() where !existingHashes.contains(hashes[index]) {
+                let filename = mediaKind == .image
+                    ? LocalMediaStore.photoFilename(index: index)
+                    : (record.originalFilename ?? "shared-item")
+                if (try? MediaIngest.attach(
                     payload,
-                    filename: record.originalFilename ?? "shared-item",
-                    kind: mediaKind
-                ) {
-                    item.media.append(
-                        MediaAttachment(
-                            type: mediaKind,
-                            localPath: path,
-                            thumbnailPath: mediaKind == .image ? try? mediaStore.createThumbnail(from: payload) : nil,
-                            originalFilename: record.originalFilename ?? "shared-item",
-                            sha256: hash,
-                            item: item
-                        )
-                    )
-                    existingHashes.insert(hash)
+                    kind: mediaKind,
+                    filename: filename,
+                    to: item,
+                    mediaStore: mediaStore
+                )) != nil {
+                    existingHashes.insert(hashes[index])
                 }
             }
 
@@ -254,6 +339,207 @@ enum ShareInboxImporter {
         MaybeSharedContainer.removeCaptureIDs(importedIDs)
         MaybeSharedContainer.publishIdeaTitles(ideas.map(\.title))
         return count
+    }
+}
+
+// MARK: - Sample library (QA only)
+
+/// Only ever runs behind `--use-sample-data`, so screenshots exercise the real
+/// media pipeline: real files on disk, real pixel sizes, real thumbnails.
+enum SampleLibrarySeeder {
+    @MainActor
+    static func seedIfNeeded(in context: ModelContext) {
+        var descriptor = FetchDescriptor<SavedItem>()
+        descriptor.fetchLimit = 1
+        guard (try? context.fetch(descriptor))?.isEmpty == true else { return }
+
+        let now = Date.now
+        let day: TimeInterval = 86_400
+
+        let buttons = SavedItem(
+            kind: .photo,
+            title: "Glass buttons on cream",
+            note: "The way the light sits on the top edge.",
+            createdAt: now.addingTimeInterval(-900),
+            sourceURLString: "https://www.pinterest.com/pin/1042",
+            isInbox: true,
+            tagNames: ["UI", "Glass"],
+            accentHex: "70AEFF"
+        )
+        let keycaps = SavedItem(
+            kind: .photo,
+            title: "Keycap depth",
+            note: "Borrow the press, not the keyboard.",
+            createdAt: now.addingTimeInterval(-4 * 3_600),
+            sourceURLString: "https://www.are.na/block/889",
+            isInbox: true,
+            tagNames: ["Motion"],
+            accentHex: "FFD83D"
+        )
+        let poster = SavedItem(
+            kind: .photo,
+            title: "Poster wall",
+            createdAt: now.addingTimeInterval(-day * 2),
+            isInbox: true,
+            tagNames: ["Colour"],
+            accentHex: "FF8066"
+        )
+        let typography = SavedItem(
+            kind: .link,
+            title: "Rounded headlines, quiet body",
+            note: "Only the headline gets the personality.",
+            createdAt: now.addingTimeInterval(-day * 5),
+            sourceURLString: "https://developer.apple.com/design/human-interface-guidelines/typography",
+            isFavorite: true,
+            isInbox: false,
+            tagNames: ["Typography"],
+            accentHex: "87E56D"
+        )
+        let thought = SavedItem(
+            kind: .note,
+            title: "Save fast, sort never",
+            note: "If saving takes more than three seconds I stop saving.",
+            createdAt: now.addingTimeInterval(-day * 21),
+            isInbox: false,
+            tagNames: ["Product"],
+            accentHex: "7957FF"
+        )
+        let palette = SavedItem(
+            kind: .file,
+            title: "Palette notes",
+            createdAt: now.addingTimeInterval(-day * 40),
+            isInbox: false,
+            tagNames: ["Colour"],
+            accentHex: "FFD83D"
+        )
+        let studio = SavedItem(
+            kind: .photo,
+            title: "Warm studio light",
+            note: "Cream walls make everything else louder.",
+            createdAt: now.addingTimeInterval(-day * 96),
+            lastViewedAt: now.addingTimeInterval(-day * 74),
+            isFavorite: true,
+            isInbox: false,
+            tagNames: ["Colour", "Light"],
+            accentHex: "FF8066"
+        )
+
+        let all = [buttons, keycaps, poster, typography, thought, palette, studio]
+        all.forEach(context.insert)
+
+        attach(sizes: [(1200, 1600), (1600, 1100), (1080, 1080), (900, 1500)], seed: 0, to: buttons)
+        attach(sizes: [(1500, 1000)], seed: 4, to: keycaps)
+        attach(sizes: [(1100, 1500)], seed: 7, to: poster)
+        attach(sizes: [(1400, 1400)], seed: 9, to: studio)
+
+        let notes = Data("Cream F3F0E7 / Ink 171717 / Purple 7957FF\n".utf8)
+        try? MediaIngest.attach(notes, kind: .file, filename: "palette-notes.txt", to: palette)
+
+        let appIdea = Idea(
+            title: "Maybe app UI",
+            note: "A local place where saved things turn into something.",
+            createdAt: now.addingTimeInterval(-day * 3),
+            modifiedAt: now.addingTimeInterval(-3_600),
+            coverItemID: buttons.id,
+            tagNames: ["UI", "Glass"],
+            accentHex: "7957FF",
+            items: [buttons, keycaps, typography]
+        )
+        let roomIdea = Idea(
+            title: "Studio wall",
+            note: "What the corner by the window could become.",
+            createdAt: now.addingTimeInterval(-day * 30),
+            modifiedAt: now.addingTimeInterval(-day * 2),
+            coverItemID: studio.id,
+            tagNames: ["Colour"],
+            accentHex: "FF8066",
+            items: [studio, poster]
+        )
+        context.insert(appIdea)
+        context.insert(roomIdea)
+
+        try? context.save()
+    }
+
+    @MainActor
+    private static func attach(sizes: [(Int, Int)], seed: Int, to item: SavedItem) {
+        for (offset, size) in sizes.enumerated() {
+            guard let payload = SamplePhotoFactory.jpeg(width: size.0, height: size.1, seed: seed + offset) else {
+                continue
+            }
+            try? MediaIngest.attach(
+                payload,
+                kind: .image,
+                filename: LocalMediaStore.photoFilename(index: offset),
+                to: item
+            )
+        }
+    }
+}
+
+/// Stand-in photographs for QA runs. The app never draws artwork for real
+/// saved items — a saved thing only ever shows its own content.
+enum SamplePhotoFactory {
+    private static let palette: [UIColor] = [
+        UIColor(red: 0.475, green: 0.341, blue: 1.000, alpha: 1),
+        UIColor(red: 1.000, green: 0.847, blue: 0.239, alpha: 1),
+        UIColor(red: 0.439, green: 0.682, blue: 1.000, alpha: 1),
+        UIColor(red: 0.529, green: 0.898, blue: 0.427, alpha: 1),
+        UIColor(red: 1.000, green: 0.502, blue: 0.400, alpha: 1),
+    ]
+    private static let canvas = UIColor(red: 0.953, green: 0.941, blue: 0.906, alpha: 1)
+
+    @MainActor
+    static func jpeg(width: Int, height: Int, seed: Int) -> Data? {
+        let size = CGSize(width: width, height: height)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = true
+
+        var generator = SeededGenerator(seed: UInt64(abs(seed) &+ 7) &* 2_654_435_761)
+        let base = palette[abs(seed) % palette.count]
+
+        let image = UIGraphicsImageRenderer(size: size, format: format).image { context in
+            let cgContext = context.cgContext
+            let bounds = CGRect(origin: .zero, size: size)
+            canvas.setFill()
+            cgContext.fill(bounds)
+            base.withAlphaComponent(0.20).setFill()
+            cgContext.fill(bounds)
+
+            let shapeCount = 3 + Int(generator.next() % 3)
+            for index in 0..<shapeCount {
+                let color = palette[(abs(seed) + index + 1) % palette.count]
+                let shapeWidth = size.width * CGFloat(0.30 + Double(generator.next() % 35) / 100)
+                let shapeHeight = size.height * CGFloat(0.22 + Double(generator.next() % 35) / 100)
+                let originX = CGFloat(Double(generator.next() % 100) / 100) * size.width - shapeWidth * 0.35
+                let originY = CGFloat(Double(generator.next() % 100) / 100) * size.height - shapeHeight * 0.35
+                let rect = CGRect(x: originX, y: originY, width: shapeWidth, height: shapeHeight)
+                let radius = min(shapeWidth, shapeHeight) * (index.isMultiple(of: 2) ? 0.5 : 0.16)
+                let path = UIBezierPath(roundedRect: rect, cornerRadius: radius)
+                color.withAlphaComponent(0.88).setFill()
+                path.fill()
+                UIColor.white.withAlphaComponent(0.55).setStroke()
+                path.lineWidth = max(2, min(size.width, size.height) * 0.012)
+                path.stroke()
+            }
+        }
+        return image.jpegData(compressionQuality: 0.9)
+    }
+}
+
+private struct SeededGenerator: RandomNumberGenerator {
+    private var state: UInt64
+
+    init(seed: UInt64) {
+        state = seed == 0 ? 0x9E37_79B9_7F4A_7C15 : seed
+    }
+
+    mutating func next() -> UInt64 {
+        state ^= state << 13
+        state ^= state >> 7
+        state ^= state << 17
+        return state
     }
 }
 

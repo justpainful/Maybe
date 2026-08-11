@@ -36,7 +36,9 @@ enum MaybeSharedContainer {
     private static let recordsFilename = "pending-captures.json"
     private static let ideaTitlesKey = "maybe.idea-titles"
 
-    static func enqueue(_ record: SharedCaptureRecord, payload: Data?) throws {
+    /// A single shared capture can carry several photos, so "share four photos
+    /// to Maybe" stays one Maybe with four photos.
+    static func enqueue(_ record: SharedCaptureRecord, payloads: [Data]) throws {
         guard let rootURL else { throw CocoaError(.fileNoSuchFile) }
         try prepare(rootURL)
 
@@ -44,15 +46,19 @@ enum MaybeSharedContainer {
         records.append(record)
         try write(records, to: rootURL)
 
-        if let payload {
-            try payload.write(to: payloadURL(for: record.id, rootURL: rootURL), options: .atomic)
+        for (index, payload) in payloads.enumerated() {
+            try payload.write(to: payloadURL(for: record.id, index: index, rootURL: rootURL), options: .atomic)
         }
     }
 
-    static func pendingCaptures() -> [(record: SharedCaptureRecord, payload: Data?)] {
+    static func enqueue(_ record: SharedCaptureRecord, payload: Data?) throws {
+        try enqueue(record, payloads: payload.map { [$0] } ?? [])
+    }
+
+    static func pendingCaptures() -> [(record: SharedCaptureRecord, payloads: [Data])] {
         guard let rootURL else { return [] }
         return loadRecords(from: rootURL).map { record in
-            (record, try? Data(contentsOf: payloadURL(for: record.id, rootURL: rootURL)))
+            (record, payloads(for: record.id, rootURL: rootURL))
         }
     }
 
@@ -60,7 +66,28 @@ enum MaybeSharedContainer {
         guard let rootURL else { return }
         let remaining = loadRecords(from: rootURL).filter { !ids.contains($0.id) }
         try? write(remaining, to: rootURL)
-        ids.forEach { try? FileManager.default.removeItem(at: payloadURL(for: $0, rootURL: rootURL)) }
+        for id in ids {
+            try? FileManager.default.removeItem(at: legacyPayloadURL(for: id, rootURL: rootURL))
+            for index in 0..<maximumPayloads {
+                let url = payloadURL(for: id, index: index, rootURL: rootURL)
+                guard FileManager.default.fileExists(atPath: url.path) else { break }
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+    }
+
+    private static let maximumPayloads = 12
+
+    private static func payloads(for id: UUID, rootURL: URL) -> [Data] {
+        var result: [Data] = []
+        for index in 0..<maximumPayloads {
+            guard let data = try? Data(contentsOf: payloadURL(for: id, index: index, rootURL: rootURL)) else { break }
+            result.append(data)
+        }
+        if result.isEmpty, let legacy = try? Data(contentsOf: legacyPayloadURL(for: id, rootURL: rootURL)) {
+            result.append(legacy)
+        }
+        return result
     }
 
     static var publishedIdeaTitles: [String] {
@@ -92,7 +119,11 @@ enum MaybeSharedContainer {
         try data.write(to: rootURL.appending(path: recordsFilename), options: .atomic)
     }
 
-    private static func payloadURL(for id: UUID, rootURL: URL) -> URL {
+    private static func payloadURL(for id: UUID, index: Int, rootURL: URL) -> URL {
+        rootURL.appending(path: "PendingPayloads/\(id.uuidString)-\(index).data")
+    }
+
+    private static func legacyPayloadURL(for id: UUID, rootURL: URL) -> URL {
         rootURL.appending(path: "PendingPayloads/\(id.uuidString).data")
     }
 }

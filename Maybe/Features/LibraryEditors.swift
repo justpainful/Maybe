@@ -1,5 +1,8 @@
+import PhotosUI
 import SwiftData
 import SwiftUI
+
+// MARK: - Add to idea
 
 struct AddToIdeaSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -13,50 +16,51 @@ struct AddToIdeaSheet: View {
         NavigationStack {
             ZStack {
                 CreamCanvas()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        Text("Choose where this belongs. Adding it also clears it from Inbox.")
-                            .font(.subheadline)
-                            .foregroundStyle(MaybePalette.ink.opacity(0.58))
 
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
                         if ideas.isEmpty {
-                            EmptyLibraryView(
-                                symbol: "lightbulb.max",
-                                title: "No ideas yet",
-                                message: "Create an idea first, then connect this Maybe to it."
-                            )
+                            EmptyLibraryView(symbol: "lightbulb", title: "No ideas yet.")
                         } else {
                             ForEach(ideas) { idea in
+                                let alreadyThere = idea.items.contains { $0.id == item.id }
                                 Button {
                                     add(to: idea)
                                 } label: {
-                                    HStack(spacing: 14) {
-                                        Image(systemName: idea.items.contains(where: { $0.id == item.id }) ? "checkmark.circle.fill" : "lightbulb.fill")
-                                            .font(.title3)
+                                    HStack(spacing: 12) {
+                                        Image(systemName: alreadyThere ? "checkmark" : "lightbulb.fill")
+                                            .font(.system(size: 16, weight: .bold))
                                             .foregroundStyle(MaybePalette.ink)
-                                            .frame(width: 46, height: 44)
-                                            .glassEffect(.regular.tint(Color(hex: idea.accentHex).opacity(0.5)), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+                                            .frame(width: 46, height: 46)
+                                            .background {
+                                                KeycapSurface(
+                                                    color: Color(hex: idea.accentHex).opacity(0.85),
+                                                    cornerRadius: 14,
+                                                    depth: 2
+                                                )
+                                            }
 
-                                        VStack(alignment: .leading, spacing: 3) {
+                                        VStack(alignment: .leading, spacing: 2) {
                                             Text(idea.title)
-                                                .font(.system(.headline, design: .rounded, weight: .bold))
-                                            Text("Inspired by \(idea.items.count) things")
-                                                .font(.caption)
-                                                .foregroundStyle(MaybePalette.ink.opacity(0.56))
+                                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                                .foregroundStyle(MaybePalette.ink)
+                                            Text("Inspired by \(idea.items.count)")
+                                                .font(.maybeMeta)
+                                                .foregroundStyle(MaybePalette.inkSoft)
                                         }
-                                        Spacer()
+                                        Spacer(minLength: 0)
                                     }
-                                    .padding(14)
-                                    .foregroundStyle(MaybePalette.ink)
-                                    .background(Color.white.opacity(0.26), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                                    .maybeGlass(cornerRadius: 22, tint: Color(hex: idea.accentHex).opacity(0.1), interactive: true)
+                                    .padding(12)
+                                    .maybePanel(cornerRadius: 20)
+                                    .opacity(alreadyThere ? 0.55 : 1)
                                 }
-                                .buttonStyle(.plain)
-                                .disabled(idea.items.contains(where: { $0.id == item.id }))
+                                .buttonStyle(PressableStyle())
+                                .disabled(alreadyThere)
                             }
                         }
                     }
-                    .padding(20)
+                    .padding(.horizontal, MaybeMetrics.pageInset)
+                    .padding(.vertical, 12)
                 }
             }
             .navigationTitle("Add to idea")
@@ -75,24 +79,25 @@ struct AddToIdeaSheet: View {
     }
 
     private var errorBinding: Binding<Bool> {
-        Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )
+        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
 
     private func add(to idea: Idea) {
         do {
             try LibraryMutationService.add(item, to: idea, in: modelContext)
+            dismiss()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 }
 
+// MARK: - Edit a saved thing
+
 struct EditItemSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @Query(sort: \SavedItem.modifiedAt, order: .reverse) private var allItems: [SavedItem]
 
     let item: SavedItem
     var onDeleted: () -> Void = {}
@@ -100,11 +105,13 @@ struct EditItemSheet: View {
     @State private var title: String
     @State private var note: String
     @State private var source: String
-    @State private var tags: String
+    @State private var tags: [String]
     @State private var isFavorite: Bool
     @State private var isInbox: Bool
+    @State private var photoSelections: [PhotosPickerItem] = []
+    @State private var isChoosingPhotos = false
     @State private var isConfirmingDelete = false
-    @State private var isShowingIdeas = false
+    @State private var removalCandidate: MediaAttachment?
     @State private var errorMessage: String?
 
     init(item: SavedItem, onDeleted: @escaping () -> Void = {}) {
@@ -113,54 +120,89 @@ struct EditItemSheet: View {
         _title = State(initialValue: item.title)
         _note = State(initialValue: item.note)
         _source = State(initialValue: item.sourceURLString ?? "")
-        _tags = State(initialValue: item.tagNames.joined(separator: ", "))
+        _tags = State(initialValue: item.tagNames)
         _isFavorite = State(initialValue: item.isFavorite)
         _isInbox = State(initialValue: item.isInbox)
     }
 
+    private var suggestions: [String] {
+        var seen = Set<String>()
+        return allItems
+            .flatMap(\.tagNames)
+            .filter { seen.insert($0.lowercased()).inserted }
+            .prefix(8)
+            .map { $0 }
+    }
+
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Maybe") {
-                    TextField("Title", text: $title)
-                    TextField("What caught you?", text: $note, axis: .vertical)
-                        .lineLimit(3...8)
-                    if item.kind == .link {
-                        TextField("Source URL", text: $source)
-                            .keyboardType(.URL)
-                            .textInputAutocapitalization(.never)
-                    }
-                }
+            ZStack {
+                CreamCanvas()
 
-                Section("Organize") {
-                    TextField("Tags, separated by commas", text: $tags)
-                    Toggle("Favorite", isOn: $isFavorite)
-                    Toggle("Keep in Inbox", isOn: $isInbox)
-                    Button {
-                        isShowingIdeas = true
-                    } label: {
-                        Label("Add to an idea", systemImage: "lightbulb.max.fill")
-                    }
-                }
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 22) {
+                        if item.kind != .file {
+                            photosSection
+                        }
 
-                if let attachment = item.media.first {
-                    Section("File") {
-                        LabeledContent("Name", value: attachment.originalFilename)
-                        LabeledContent("Stored", value: "On this device")
-                    }
-                }
+                        VStack(alignment: .leading, spacing: 10) {
+                            label("Name")
+                            TextField("Name", text: $title)
+                                .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                .padding(16)
+                                .maybePanel(cornerRadius: 18)
+                        }
 
-                Section {
-                    Button("Delete Maybe", role: .destructive) {
-                        isConfirmingDelete = true
+                        VStack(alignment: .leading, spacing: 10) {
+                            label("What caught you?")
+                            TextField("Why this one?", text: $note, axis: .vertical)
+                                .lineLimit(3...8)
+                                .font(.system(size: 16))
+                                .padding(16)
+                                .maybePanel(cornerRadius: 18)
+                        }
+
+                        if item.kind == .link || !source.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                label("Source")
+                                TextField("https://", text: $source)
+                                    .keyboardType(.URL)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .font(.system(size: 15, weight: .semibold, design: .rounded))
+                                    .padding(16)
+                                    .maybePanel(cornerRadius: 18)
+                            }
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            label("Tags")
+                            TagEditor(tags: $tags, suggestions: suggestions)
+                        }
+
+                        VStack(spacing: 0) {
+                            Toggle("Favourite", isOn: $isFavorite)
+                                .padding(16)
+                            Divider().padding(.horizontal, 16)
+                            Toggle("Keep in Inbox", isOn: $isInbox)
+                                .padding(16)
+                        }
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .foregroundStyle(MaybePalette.ink)
+                        .tint(MaybePalette.purple)
+                        .maybePanel(cornerRadius: 20)
+
+                        Button("Delete this Maybe", role: .destructive) {
+                            isConfirmingDelete = true
+                        }
+                        .buttonStyle(KeycapButtonStyle(color: MaybePalette.coral.opacity(0.85), cornerRadius: 18))
                     }
-                } footer: {
-                    Text("Deleting removes its local media too. Ideas that used it are preserved.")
+                    .padding(.horizontal, MaybeMetrics.pageInset)
+                    .padding(.top, 10)
+                    .padding(.bottom, 28)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(CreamCanvas())
-            .navigationTitle("Edit Maybe")
+            .navigationTitle("Edit")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -171,15 +213,25 @@ struct EditItemSheet: View {
                         .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
-            .sheet(isPresented: $isShowingIdeas) {
-                AddToIdeaSheet(item: item)
-                    .presentationDetents([.medium, .large])
+            .photosPicker(
+                isPresented: $isChoosingPhotos,
+                selection: $photoSelections,
+                maxSelectionCount: 12,
+                matching: .images
+            )
+            .onChange(of: photoSelections) { _, selections in
+                guard !selections.isEmpty else { return }
+                addPhotos(selections)
             }
             .confirmationDialog("Delete this Maybe?", isPresented: $isConfirmingDelete, titleVisibility: .visible) {
                 Button("Delete", role: .destructive, action: delete)
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This cannot be undone.")
+                Text("Its local media is removed too.")
+            }
+            .confirmationDialog("Remove this photo?", isPresented: removalBinding, titleVisibility: .visible) {
+                Button("Remove", role: .destructive) { removeSelectedPhoto() }
+                Button("Cancel", role: .cancel) { removalCandidate = nil }
             }
             .alert("Couldn’t save changes", isPresented: errorBinding) {
                 Button("OK", role: .cancel) {}
@@ -189,25 +241,122 @@ struct EditItemSheet: View {
         }
     }
 
-    private var parsedTags: [String] {
-        Array(Set(tags.split(separator: ",").map {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines)
-        }.filter { !$0.isEmpty })).sorted()
+    private var photosSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            label(item.imageCount == 0 ? "Photos" : "\(item.imageCount) photo\(item.imageCount == 1 ? "" : "s")")
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(item.images) { attachment in
+                        LocalAttachmentImage(attachment: attachment, accessibilityTitle: item.title)
+                            .frame(width: 92, height: 112)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .strokeBorder(MaybePalette.hairline, lineWidth: 1)
+                            }
+                            .overlay(alignment: .topTrailing) {
+                                Button {
+                                    removalCandidate = attachment
+                                } label: {
+                                    Image(systemName: "xmark")
+                                        .font(.system(size: 10, weight: .black))
+                                        .foregroundStyle(MaybePalette.ink)
+                                        .frame(width: 26, height: 26)
+                                        .background(Color.white.opacity(0.85), in: Circle())
+                                        .overlay(Circle().strokeBorder(MaybePalette.hairline, lineWidth: 1))
+                                }
+                                .buttonStyle(PressableStyle(scale: 0.9))
+                                .padding(6)
+                                .accessibilityLabel("Remove photo")
+                            }
+                    }
+
+                    if item.imageCount < 12 {
+                        Button {
+                            isChoosingPhotos = true
+                        } label: {
+                            VStack(spacing: 6) {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 18, weight: .bold))
+                                Text("Add")
+                                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                            }
+                            .foregroundStyle(MaybePalette.ink)
+                            .frame(width: 92, height: 112)
+                            .background {
+                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                    .fill(MaybePalette.blue.opacity(0.16))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .strokeBorder(
+                                                MaybePalette.ink.opacity(0.18),
+                                                style: StrokeStyle(lineWidth: 1.5, dash: [7, 5])
+                                            )
+                                    }
+                            }
+                        }
+                        .buttonStyle(PressableStyle())
+                        .accessibilityIdentifier("add-photos-button")
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .contentMargins(.horizontal, 0, for: .scrollContent)
+        }
+    }
+
+    private func label(_ text: String) -> some View {
+        Text(text)
+            .font(.maybeSectionTitle)
+            .foregroundStyle(MaybePalette.ink)
     }
 
     private var errorBinding: Binding<Bool> {
         Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
 
+    private var removalBinding: Binding<Bool> {
+        Binding(get: { removalCandidate != nil }, set: { if !$0 { removalCandidate = nil } })
+    }
+
+    private func addPhotos(_ selections: [PhotosPickerItem]) {
+        Task {
+            var payloads: [Data] = []
+            for selection in selections {
+                guard let data = try? await selection.loadTransferable(type: Data.self) else { continue }
+                payloads.append(data)
+            }
+            photoSelections = []
+            guard !payloads.isEmpty else { return }
+            do {
+                try LibraryMutationService.addPhotos(payloads, to: item, in: modelContext)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func removeSelectedPhoto() {
+        guard let attachment = removalCandidate else { return }
+        do {
+            try LibraryMutationService.removeMedia(attachment, from: item, in: modelContext)
+            removalCandidate = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func save() {
         do {
             item.isFavorite = isFavorite
+            let trimmedSource = source.trimmingCharacters(in: .whitespacesAndNewlines)
             try LibraryMutationService.update(
                 item,
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                 note: note.trimmingCharacters(in: .whitespacesAndNewlines),
-                sourceURLString: source.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
-                tagNames: parsedTags,
+                sourceURLString: trimmedSource.isEmpty ? nil : trimmedSource,
+                tagNames: tags,
                 isInbox: isInbox,
                 in: modelContext
             )
@@ -228,6 +377,8 @@ struct EditItemSheet: View {
     }
 }
 
+// MARK: - Edit an idea
+
 struct EditIdeaSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -238,7 +389,7 @@ struct EditIdeaSheet: View {
 
     @State private var title: String
     @State private var note: String
-    @State private var tags: String
+    @State private var tags: [String]
     @State private var selectedIDs: Set<UUID>
     @State private var coverItemID: UUID?
     @State private var isConfirmingDelete = false
@@ -249,68 +400,85 @@ struct EditIdeaSheet: View {
         self.onDeleted = onDeleted
         _title = State(initialValue: idea.title)
         _note = State(initialValue: idea.note)
-        _tags = State(initialValue: idea.tagNames.joined(separator: ", "))
+        _tags = State(initialValue: idea.tagNames)
         _selectedIDs = State(initialValue: Set(idea.items.map(\.id)))
         _coverItemID = State(initialValue: idea.coverItemID)
     }
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Idea") {
-                    TextField("Idea name", text: $title)
-                    TextField("What could this become?", text: $note, axis: .vertical)
-                        .lineLimit(3...8)
-                    TextField("Tags, separated by commas", text: $tags)
-                }
+            ZStack {
+                CreamCanvas()
 
-                Section {
-                    ForEach(items) { item in
-                        Button {
-                            toggle(item)
-                        } label: {
-                            HStack(spacing: 12) {
-                                InspirationThumbnail(item: item)
-                                    .frame(width: 54, height: 50)
-                                    .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
-                                Text(item.title)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 22) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            TextField("Idea name", text: $title)
+                                .font(.maybeRounded(22, weight: .black))
+                                .padding(16)
+                                .maybePanel(cornerRadius: 20)
+
+                            TextField("What could this become?", text: $note, axis: .vertical)
+                                .lineLimit(2...6)
+                                .font(.system(size: 16))
+                                .padding(16)
+                                .maybePanel(cornerRadius: 20)
+                        }
+
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Tags")
+                                .font(.maybeSectionTitle)
+                                .foregroundStyle(MaybePalette.ink)
+                            TagEditor(tags: $tags)
+                        }
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeader(title: "Inspired by", count: selectedIDs.count)
+
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 10)], spacing: 10) {
+                                ForEach(items) { item in
+                                    Button {
+                                        toggle(item)
+                                    } label: {
+                                        tile(item)
+                                    }
+                                    .buttonStyle(PressableStyle())
+                                    .accessibilityLabel(item.title)
+                                    .accessibilityAddTraits(selectedIDs.contains(item.id) ? .isSelected : [])
+                                }
+                            }
+                        }
+
+                        if selectedIDs.count > 1 {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Cover")
+                                    .font(.maybeSectionTitle)
                                     .foregroundStyle(MaybePalette.ink)
-                                Spacer()
-                                Image(systemName: selectedIDs.contains(item.id) ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(selectedIDs.contains(item.id) ? MaybePalette.purple : MaybePalette.ink.opacity(0.3))
+                                Picker("Cover", selection: $coverItemID) {
+                                    Text("Automatic").tag(UUID?.none)
+                                    ForEach(items.filter { selectedIDs.contains($0.id) }) { item in
+                                        Text(item.title).tag(UUID?.some(item.id))
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .tint(MaybePalette.ink)
+                                .frame(maxWidth: .infinity, minHeight: 50, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .maybePanel(cornerRadius: 18)
                             }
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityValue(selectedIDs.contains(item.id) ? "Selected" : "Not selected")
-                    }
-                } header: {
-                    Text("Inspired by")
-                } footer: {
-                    Text("Select the things that shape this idea.")
-                }
 
-                if !selectedIDs.isEmpty {
-                    Section("Cover") {
-                        Picker("Cover Maybe", selection: $coverItemID) {
-                            Text("Automatic").tag(UUID?.none)
-                            ForEach(items.filter { selectedIDs.contains($0.id) }) { item in
-                                Text(item.title).tag(UUID?.some(item.id))
-                            }
+                        Button("Delete this idea", role: .destructive) {
+                            isConfirmingDelete = true
                         }
+                        .buttonStyle(KeycapButtonStyle(color: MaybePalette.coral.opacity(0.85), cornerRadius: 18))
                     }
-                }
-
-                Section {
-                    Button("Delete Idea", role: .destructive) {
-                        isConfirmingDelete = true
-                    }
-                } footer: {
-                    Text("The saved things inside it will not be deleted.")
+                    .padding(.horizontal, MaybeMetrics.pageInset)
+                    .padding(.top, 10)
+                    .padding(.bottom, 28)
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(CreamCanvas())
-            .navigationTitle("Edit Idea")
+            .navigationTitle("Edit idea")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -325,7 +493,7 @@ struct EditIdeaSheet: View {
                 Button("Delete", role: .destructive, action: delete)
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Its saved things will stay in Maybe.")
+                Text("The things inside it stay in Maybe.")
             }
             .alert("Couldn’t save changes", isPresented: errorBinding) {
                 Button("OK", role: .cancel) {}
@@ -335,10 +503,27 @@ struct EditIdeaSheet: View {
         }
     }
 
-    private var parsedTags: [String] {
-        Array(Set(tags.split(separator: ",").map {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines)
-        }.filter { !$0.isEmpty })).sorted()
+    private func tile(_ item: SavedItem) -> some View {
+        let isSelected = selectedIDs.contains(item.id)
+        return Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay { ItemPreview(item: item, compact: true) }
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(isSelected ? MaybePalette.ink : MaybePalette.hairline, lineWidth: isSelected ? 2.5 : 1)
+            }
+            .overlay(alignment: .topTrailing) {
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .black))
+                        .foregroundStyle(MaybePalette.ink)
+                        .frame(width: 24, height: 24)
+                        .background(MaybePalette.green, in: Circle())
+                        .overlay(Circle().strokeBorder(MaybePalette.ink.opacity(0.2), lineWidth: 1))
+                        .padding(6)
+                }
+            }
     }
 
     private var errorBinding: Binding<Bool> {
@@ -346,10 +531,11 @@ struct EditIdeaSheet: View {
     }
 
     private func toggle(_ item: SavedItem) {
-        if selectedIDs.remove(item.id) == nil {
+        if selectedIDs.contains(item.id) {
+            selectedIDs.remove(item.id)
+            if coverItemID == item.id { coverItemID = nil }
+        } else {
             selectedIDs.insert(item.id)
-        } else if coverItemID == item.id {
-            coverItemID = nil
         }
     }
 
@@ -359,7 +545,7 @@ struct EditIdeaSheet: View {
                 idea,
                 title: title.trimmingCharacters(in: .whitespacesAndNewlines),
                 note: note.trimmingCharacters(in: .whitespacesAndNewlines),
-                tagNames: parsedTags,
+                tagNames: tags,
                 itemIDs: selectedIDs,
                 coverItemID: coverItemID,
                 from: items,
@@ -380,8 +566,4 @@ struct EditIdeaSheet: View {
             errorMessage = error.localizedDescription
         }
     }
-}
-
-private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

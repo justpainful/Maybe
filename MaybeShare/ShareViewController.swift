@@ -40,7 +40,7 @@ final class ShareViewController: UIViewController {
 @MainActor
 final class ShareCaptureModel: ObservableObject {
     @Published var kindRawValue = "note"
-    @Published var title = "Shared with Maybe"
+    @Published var title = ""
     @Published var thought = ""
     @Published var sourceURLString: String?
     @Published var originalFilename: String?
@@ -50,7 +50,11 @@ final class ShareCaptureModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var itemCount = 0
 
-    private var drafts: [LoadedShare] = []
+    private(set) var drafts: [LoadedShare] = []
+
+    var photoPayloads: [Data] {
+        drafts.filter { $0.kindRawValue == "photo" }.compactMap(\.payload)
+    }
 
     let ideaTitles = MaybeSharedContainer.publishedIdeaTitles
 
@@ -70,7 +74,10 @@ final class ShareCaptureModel: ObservableObject {
                 }
             }
             drafts = loaded
-            itemCount = loaded.count
+            let photoCount = loaded.filter { $0.kindRawValue == "photo" }.count
+            // Several photos shared together become one Maybe, so count what
+            // will actually be saved.
+            itemCount = photoCount > 0 ? loaded.count - photoCount + 1 : loaded.count
             if let first = loaded.first {
                 kindRawValue = first.kindRawValue
                 title = first.title
@@ -87,7 +94,7 @@ final class ShareCaptureModel: ObservableObject {
 
     private func load(_ provider: NSItemProvider) async -> LoadedShare? {
         if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
-            let name = provider.suggestedName ?? "A photo that caught me"
+            let name = provider.suggestedName ?? "Photo"
             return await withCheckedContinuation { continuation in
                 _ = provider.loadDataRepresentation(for: .image) { data, error in
                     continuation.resume(returning: data.map {
@@ -112,7 +119,7 @@ final class ShareCaptureModel: ObservableObject {
                     continuation.resume(returning: urlString.map {
                         LoadedShare(
                             kindRawValue: "link",
-                            title: URL(string: $0)?.host() ?? "A link worth keeping",
+                            title: URL(string: $0)?.host() ?? "Link",
                             sourceURLString: $0
                         )
                     })
@@ -132,7 +139,7 @@ final class ShareCaptureModel: ObservableObject {
                     continuation.resume(returning: data.map {
                         LoadedShare(
                             kindRawValue: "file",
-                            title: filename ?? "A saved file",
+                            title: filename ?? "File",
                             originalFilename: filename,
                             payload: $0
                         )
@@ -150,7 +157,7 @@ final class ShareCaptureModel: ObservableObject {
                     let sharedText = (value as? String) ?? ""
                     continuation.resume(returning: LoadedShare(
                         kindRawValue: "note",
-                        title: sharedText.isEmpty ? "A thought" : sharedText
+                        title: sharedText.isEmpty ? "Note" : sharedText
                     ))
                     if let error {
                         Task { @MainActor [weak self] in self?.errorMessage = error.localizedDescription }
@@ -166,21 +173,37 @@ final class ShareCaptureModel: ObservableObject {
         guard !drafts.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
         let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedThought = thought.trimmingCharacters(in: .whitespacesAndNewlines)
-        for (index, draft) in drafts.enumerated() {
+        let idea = selectedIdea.isEmpty ? nil : selectedIdea
+
+        let photos = drafts.filter { $0.kindRawValue == "photo" }
+        let rest = drafts.filter { $0.kindRawValue != "photo" }
+
+        if !photos.isEmpty {
+            let fallback = photos.count > 1 ? "\(photos.count) photos" : (photos[0].title)
+            let record = SharedCaptureRecord(
+                kindRawValue: "photo",
+                title: normalizedTitle.isEmpty ? fallback : normalizedTitle,
+                thought: normalizedThought,
+                ideaTitle: idea
+            )
+            try MaybeSharedContainer.enqueue(record, payloads: photos.compactMap(\.payload))
+        }
+
+        for draft in rest {
             let record = SharedCaptureRecord(
                 kindRawValue: draft.kindRawValue,
-                title: index == 0 && !normalizedTitle.isEmpty ? normalizedTitle : draft.title,
+                title: draft.title,
                 thought: normalizedThought,
                 sourceURLString: draft.sourceURLString,
                 originalFilename: draft.originalFilename,
-                ideaTitle: selectedIdea.isEmpty ? nil : selectedIdea
+                ideaTitle: idea
             )
-            try MaybeSharedContainer.enqueue(record, payload: draft.payload)
+            try MaybeSharedContainer.enqueue(record, payloads: draft.payload.map { [$0] } ?? [])
         }
     }
 }
 
-private struct LoadedShare: Sendable {
+struct LoadedShare: Sendable {
     let kindRawValue: String
     let title: String
     var sourceURLString: String? = nil
@@ -195,17 +218,19 @@ private struct ShareCaptureView: View {
 
     var body: some View {
         ZStack {
-            Color(red: 243 / 255, green: 240 / 255, blue: 231 / 255)
-                .ignoresSafeArea()
+            CreamCanvas()
 
-            VStack(spacing: 22) {
+            VStack(spacing: 20) {
                 HStack {
                     Button("Cancel", action: onCancel)
+                        .font(.maybeControl)
+                        .foregroundStyle(MaybePalette.ink)
                     Spacer()
-                    Text(model.itemCount > 1 ? "Add \(model.itemCount) to Maybe" : "Add to Maybe")
-                        .font(.system(.headline, design: .rounded, weight: .bold))
+                    Text(model.itemCount > 1 ? "Add \(model.itemCount) things" : "Add to Maybe")
+                        .font(.maybeRounded(17, weight: .black))
+                        .foregroundStyle(MaybePalette.ink)
                     Spacer()
-                    Color.clear.frame(width: 52, height: 1)
+                    Color.clear.frame(width: 56, height: 1)
                 }
 
                 if model.isLoading {
@@ -216,11 +241,13 @@ private struct ShareCaptureView: View {
 
                     VStack(alignment: .leading, spacing: 9) {
                         Text("What caught you?")
-                            .font(.system(.headline, design: .rounded, weight: .bold))
+                            .font(.maybeSectionTitle)
+                            .foregroundStyle(MaybePalette.ink)
                         TextField("Add a thought…", text: $model.thought, axis: .vertical)
                             .lineLimit(2...5)
+                            .font(.system(size: 16))
                             .padding(15)
-                            .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .maybePanel(cornerRadius: 18)
                     }
 
                     if !model.ideaTitles.isEmpty {
@@ -229,8 +256,10 @@ private struct ShareCaptureView: View {
                             ForEach(model.ideaTitles, id: \.self) { Text($0).tag($0) }
                         }
                         .pickerStyle(.menu)
-                        .padding(14)
-                        .glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .tint(MaybePalette.ink)
+                        .frame(maxWidth: .infinity, minHeight: 50, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .maybePanel(cornerRadius: 18)
                     }
 
                     Spacer(minLength: 0)
@@ -243,13 +272,9 @@ private struct ShareCaptureView: View {
                             model.errorMessage = error.localizedDescription
                         }
                     } label: {
-                        Label("Save", systemImage: "arrow.down.to.line.compact")
-                            .font(.system(.headline, design: .rounded, weight: .bold))
-                            .foregroundStyle(Color(red: 23 / 255, green: 23 / 255, blue: 23 / 255))
-                            .frame(maxWidth: .infinity, minHeight: 54)
+                        Text("Save")
                     }
-                    .buttonStyle(.glassProminent)
-                    .tint(Color(red: 1, green: 216 / 255, blue: 61 / 255))
+                    .buttonStyle(KeycapButtonStyle(color: MaybePalette.yellow, cornerRadius: 20, minHeight: 54))
                 }
             }
             .padding(20)
@@ -262,37 +287,53 @@ private struct ShareCaptureView: View {
     }
 
     private var preview: some View {
-        HStack(spacing: 14) {
-            Group {
-                if model.kindRawValue == "photo", let data = model.payload, let image = UIImage(data: data) {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                } else {
+        VStack(alignment: .leading, spacing: 12) {
+            let photos = model.photoPayloads
+            if photos.isEmpty {
+                HStack(spacing: 14) {
                     Image(systemName: previewSymbol)
-                        .font(.system(size: 27, weight: .bold))
-                        .background(previewColor)
+                        .font(.system(size: 22, weight: .bold))
+                        .foregroundStyle(MaybePalette.ink)
+                        .frame(width: 62, height: 60)
+                        .background { KeycapSurface(color: previewColor, cornerRadius: 18, depth: 2) }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(model.title.isEmpty ? model.kindRawValue.capitalized : model.title)
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundStyle(MaybePalette.ink)
+                            .lineLimit(2)
+                        Text(model.kindRawValue.capitalized)
+                            .font(.maybeMeta)
+                            .foregroundStyle(MaybePalette.inkSoft)
+                    }
+                    Spacer(minLength: 0)
                 }
-            }
-            .frame(width: 62, height: 60)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            VStack(alignment: .leading, spacing: 4) {
-                Text(model.title)
-                    .font(.system(.headline, design: .rounded, weight: .bold))
-                    .lineLimit(2)
-                Text(model.kindRawValue.capitalized)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                if model.itemCount > 1 {
-                    Text("+ \(model.itemCount - 1) more")
-                        .font(.caption.bold())
-                        .foregroundStyle(.secondary)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(Array(photos.prefix(6).enumerated()), id: \.offset) { _, data in
+                            if let image = UIImage(data: data) {
+                                Image(uiImage: image)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 84, height: 100)
+                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                    .overlay {
+                                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                            .strokeBorder(MaybePalette.hairline, lineWidth: 1)
+                                    }
+                            }
+                        }
+                    }
                 }
+                Text(photos.count > 1 ? "\(photos.count) photos, saved as one Maybe" : "1 photo")
+                    .font(.maybeMeta)
+                    .foregroundStyle(MaybePalette.inkSoft)
             }
-            Spacer()
         }
         .padding(15)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .maybePanel(cornerRadius: 22)
     }
 
     private var previewSymbol: String {
@@ -306,10 +347,10 @@ private struct ShareCaptureView: View {
 
     private var previewColor: Color {
         switch model.kindRawValue {
-        case "photo": Color(red: 112 / 255, green: 174 / 255, blue: 1)
-        case "link": Color(red: 135 / 255, green: 229 / 255, blue: 109 / 255)
-        case "file": Color(red: 121 / 255, green: 87 / 255, blue: 1)
-        default: Color(red: 1, green: 216 / 255, blue: 61 / 255)
+        case "photo": MaybePalette.blue
+        case "link": MaybePalette.green
+        case "file": MaybePalette.purple
+        default: MaybePalette.yellow
         }
     }
 

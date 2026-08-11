@@ -17,20 +17,16 @@ struct SettingsView: View {
         NavigationStack {
             ZStack {
                 CreamCanvas()
+
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         privacyHero
-                        librarySection
-                        factsSection
-
-                        Text("Maybe is a quiet place for the things that catch you — and the ideas they become.")
-                            .font(.footnote)
-                            .foregroundStyle(MaybePalette.ink.opacity(0.52))
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 8)
+                        counts
+                        backupSection
+                        promises
                     }
-                    .padding(20)
+                    .padding(.horizontal, MaybeMetrics.pageInset)
+                    .padding(.top, 10)
                     .padding(.bottom, 30)
                 }
             }
@@ -67,107 +63,108 @@ struct SettingsView: View {
     }
 
     private var privacyHero: some View {
-        VStack(spacing: 15) {
-            MaybeMark(size: 82)
+        VStack(spacing: 12) {
+            MaybeMark(size: 72)
             Text("Everything stays\non this device.")
-                .font(.maybeRounded(28, weight: .black))
+                .font(.maybeRounded(25, weight: .black))
+                .foregroundStyle(MaybePalette.ink)
                 .multilineTextAlignment(.center)
             Text("No account. No cloud. No tracking.")
-                .font(.subheadline)
-                .foregroundStyle(MaybePalette.ink.opacity(0.58))
+                .font(.system(size: 14))
+                .foregroundStyle(MaybePalette.inkSoft)
         }
         .frame(maxWidth: .infinity)
-        .padding(26)
-        .background(MaybePalette.green.opacity(0.35), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .maybeGlass(cornerRadius: 30, tint: MaybePalette.green.opacity(0.16))
+        .padding(.vertical, 26)
+        .background(MaybePalette.green.opacity(0.3), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .strokeBorder(MaybePalette.hairline, lineWidth: 1)
+        }
     }
 
-    private var librarySection: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            Text("Your library")
-                .font(.maybeRounded(22, weight: .bold))
+    private var counts: some View {
+        HStack(spacing: 12) {
+            countCard(value: items.count, label: "Things", color: MaybePalette.blue)
+            countCard(value: ideas.count, label: "Ideas", color: MaybePalette.yellow)
+        }
+    }
 
-            HStack(spacing: 12) {
-                statCard(value: "\(items.count)", label: "Things", color: MaybePalette.blue)
-                statCard(value: "\(ideas.count)", label: "Ideas", color: MaybePalette.yellow)
-            }
+    private var backupSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionHeader(title: "Backup")
 
             Button(action: exportLibrary) {
-                Label("Export Maybe", systemImage: "square.and.arrow.up")
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 44)
+                Text("Export my library")
             }
-            .buttonStyle(.glassProminent)
-            .buttonBorderShape(.roundedRectangle(radius: 20))
-            .tint(MaybePalette.purple)
-            .foregroundStyle(MaybePalette.ink)
+            .buttonStyle(KeycapButtonStyle(color: MaybePalette.purple, cornerRadius: 18))
 
             Button {
                 isImporting = true
             } label: {
-                Label("Import Maybe", systemImage: "square.and.arrow.down")
-                    .frame(maxWidth: .infinity)
-                    .frame(minHeight: 44)
+                Text("Import a library")
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.roundedRectangle(radius: 20))
-            .tint(MaybePalette.glassWhite)
-            .foregroundStyle(MaybePalette.ink)
+            .buttonStyle(KeycapButtonStyle(color: Color.white.opacity(0.7), cornerRadius: 18))
+
+            Text("One file with every photo, note and idea. Move it between your own devices by hand.")
+                .font(.system(size: 13))
+                .foregroundStyle(MaybePalette.inkSoft)
         }
     }
 
-    private var factsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Private by design")
-                .font(.maybeRounded(22, weight: .bold))
-            privacyRow("No login", symbol: "person.crop.circle.badge.xmark", color: MaybePalette.coral)
-            privacyRow("No analytics SDK", symbol: "chart.bar.xaxis", color: MaybePalette.blue)
-            privacyRow("No remote database", symbol: "externaldrive.badge.xmark", color: MaybePalette.green)
-            privacyRow("Manual backup whenever you want", symbol: "shippingbox.fill", color: MaybePalette.yellow)
+    private var promises: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "Private by design")
+            promiseRow("No login")
+            promiseRow("No analytics")
+            promiseRow("No remote database")
+            promiseRow("Nothing is uploaded, ever")
         }
     }
 
-    private func statCard(value: String, label: String, color: Color) -> some View {
-        VStack(spacing: 4) {
-            Text(value)
-                .font(.maybeRounded(30, weight: .black))
+    private func countCard(value: Int, label: String, color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text("\(value)")
+                .font(.maybeRounded(28, weight: .black))
+                .monospacedDigit()
+                .foregroundStyle(MaybePalette.ink)
             Text(label)
-                .font(.caption)
-                .foregroundStyle(MaybePalette.ink.opacity(0.58))
+                .font(.maybeMeta)
+                .foregroundStyle(MaybePalette.inkSoft)
         }
         .frame(maxWidth: .infinity)
-        .padding(17)
-        .background(color.opacity(0.42), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .maybeGlass(cornerRadius: 22, tint: color.opacity(0.16))
+        .padding(.vertical, 16)
+        .background(color.opacity(0.34), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(MaybePalette.hairline, lineWidth: 1)
+        }
     }
 
-    private func privacyRow(_ title: String, symbol: String, color: Color) -> some View {
-        HStack(spacing: 13) {
-            Image(systemName: symbol)
-                .font(.system(size: 18, weight: .bold))
-                .frame(width: 44, height: 42)
-                .background(color.opacity(0.58), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            Text(title)
-                .font(.system(.body, design: .rounded, weight: .semibold))
-            Spacer()
+    private func promiseRow(_ title: String) -> some View {
+        HStack(spacing: 12) {
             Image(systemName: "checkmark")
-                .font(.caption.bold())
+                .font(.system(size: 12, weight: .black))
+                .foregroundStyle(MaybePalette.ink)
+                .frame(width: 30, height: 30)
+                .background { KeycapSurface(color: MaybePalette.green, cornerRadius: 10, depth: 2) }
+            Text(title)
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(MaybePalette.ink)
+            Spacer(minLength: 0)
         }
         .padding(10)
-        .background(Color.white.opacity(0.38), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
-        .maybeGlass(cornerRadius: 19)
+        .maybePanel(cornerRadius: 18)
     }
 
     private var statusBinding: Binding<Bool> {
-        Binding(
-            get: { statusMessage != nil },
-            set: { if !$0 { statusMessage = nil } }
-        )
+        Binding(get: { statusMessage != nil }, set: { if !$0 { statusMessage = nil } })
     }
 
     private func exportLibrary() {
         do {
-            exportDocument = MaybeArchiveDocument(wrapper: try LibraryArchiveService.exportPackage(items: items, ideas: ideas))
+            exportDocument = MaybeArchiveDocument(
+                wrapper: try LibraryArchiveService.exportPackage(items: items, ideas: ideas)
+            )
             isExporting = true
         } catch {
             statusMessage = error.localizedDescription
