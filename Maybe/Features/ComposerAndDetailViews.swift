@@ -65,13 +65,12 @@ struct AddMaybeSheet: View {
                     }
                     .font(.system(.headline, design: .rounded, weight: .bold))
                     .frame(maxWidth: .infinity)
-                    .frame(minHeight: 30)
+                    .padding(.vertical, 2)
                 }
                 .buttonStyle(.glassProminent)
                 .buttonBorderShape(.roundedRectangle(radius: 18))
                 .tint(MaybePalette.yellow)
                 .foregroundStyle(MaybePalette.ink)
-                .controlSize(.large)
                 .disabled(isSaving)
                 .accessibilityIdentifier("save-maybe-button")
                 .padding(.horizontal, MaybeMetrics.pageInset)
@@ -118,11 +117,11 @@ struct AddMaybeSheet: View {
                 Button { dismiss() } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(MaybePalette.ink)
                         .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
-                .tint(Color.white.opacity(0.2))
                 .accessibilityLabel("Close")
 
                 Spacer()
@@ -245,13 +244,20 @@ struct AddMaybeSheet: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(recentTags, id: \.self) { tag in
-                            Button(tag) {
+                            Button {
                                 appendTag(tag)
+                            } label: {
+                                Text(tag)
+                                    .font(.system(.caption, design: .rounded, weight: .bold))
+                                    .foregroundStyle(MaybePalette.ink)
+                                    .padding(.horizontal, 13)
+                                    .frame(height: 34)
+                                    .glassEffect(
+                                        .regular.tint(MaybePalette.green.opacity(0.34)).interactive(),
+                                        in: Capsule()
+                                    )
                             }
-                            .font(.system(.caption, design: .rounded, weight: .bold))
-                            .buttonStyle(.glass)
-                            .buttonBorderShape(.capsule)
-                            .tint(MaybePalette.green.opacity(0.34))
+                            .buttonStyle(ComposerPressButtonStyle())
                         }
                     }
                 }
