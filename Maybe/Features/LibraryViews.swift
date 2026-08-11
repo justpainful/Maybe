@@ -48,21 +48,19 @@ struct HomeView: View {
                     message: "A photo, link, note, or file can become a Maybe."
                 )
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 14) {
-                        ForEach(items.prefix(6)) { item in
-                            NavigationLink {
-                                ItemDetailView(item: item)
-                            } label: {
-                                SavedCard(item: item)
-                            }
-                            .buttonStyle(.plain)
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(items.prefix(2)) { item in
+                        NavigationLink {
+                            ItemDetailView(item: item)
+                        } label: {
+                            SavedCard(item: item, width: nil)
+                                .frame(maxWidth: .infinity)
                         }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
                     }
-                    .padding(.vertical, 8)
                 }
-                .scrollEdgeEffectHidden(true, for: .all)
-                .scrollClipDisabled()
+                .padding(.vertical, 8)
             }
         }
     }
@@ -257,8 +255,6 @@ struct IdeasView: View {
     @Query(sort: \Idea.modifiedAt, order: .reverse) private var ideas: [Idea]
     let onAdd: () -> Void
 
-    private let columns = [GridItem(.adaptive(minimum: 220), spacing: 16)]
-
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 22) {
@@ -284,15 +280,14 @@ struct IdeasView: View {
                         message: "Connect the things that inspired it."
                     )
                 } else {
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(ideas) { idea in
-                            NavigationLink {
-                                IdeaDetailView(idea: idea)
-                            } label: {
-                                IdeaCard(idea: idea)
-                            }
-                            .buttonStyle(.plain)
+                    ForEach(ideas) { idea in
+                        NavigationLink {
+                            IdeaDetailView(idea: idea)
+                        } label: {
+                            IdeaCard(idea: idea)
                         }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
                     }
                 }
             }
@@ -362,7 +357,7 @@ struct LibrarySearchView: View {
                         Button {
                             selectedKind = selectedKind == kind ? nil : kind
                         } label: {
-                            FilterKeycap(name: kind.title, color: MaybePalette.accents[kindIndex(kind)], selected: selectedKind == kind)
+                            FilterKeycap(name: kind.title, color: accent(for: kind), selected: selectedKind == kind)
                         }
                     }
                 }
@@ -410,7 +405,12 @@ struct LibrarySearchView: View {
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your Maybes")
     }
 
-    private func kindIndex(_ kind: MaybeKind) -> Int {
-        MaybeKind.allCases.firstIndex(of: kind) ?? 0
+    private func accent(for kind: MaybeKind) -> Color {
+        switch kind {
+        case .photo: MaybePalette.blue
+        case .link: MaybePalette.green
+        case .note: MaybePalette.yellow
+        case .file: MaybePalette.purple
+        }
     }
 }

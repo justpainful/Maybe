@@ -30,7 +30,7 @@ struct AddMaybeSheet: View {
         return existingItems
             .flatMap(\.tagNames)
             .filter { seen.insert($0.lowercased()).inserted }
-            .prefix(6)
+            .prefix(4)
             .map { $0 }
     }
 
@@ -78,7 +78,7 @@ struct AddMaybeSheet: View {
                 .padding(.horizontal, MaybeMetrics.pageInset)
                 .padding(.top, 10)
                 .padding(.bottom, 8)
-                .background(.ultraThinMaterial)
+                .background(MaybePalette.cream.opacity(0.96))
             }
             .fileImporter(
                 isPresented: $isChoosingFile,

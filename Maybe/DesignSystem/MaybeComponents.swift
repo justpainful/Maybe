@@ -196,6 +196,8 @@ struct SavedCard: View {
                         .font(.system(.headline, design: .rounded, weight: .bold))
                         .foregroundStyle(MaybePalette.ink)
                         .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .layoutPriority(1)
                     Spacer(minLength: 0)
                     if item.isFavorite {
                         Image(systemName: "heart.fill")
