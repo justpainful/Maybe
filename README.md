@@ -18,3 +18,6 @@ The `MaybeShare` extension accepts photos, links, text, and files from the syste
 Open `Maybe.xcodeproj`, select the `Maybe` scheme, and run on an iOS 26 simulator.
 
 The CI workflow builds and runs unit tests on GitHub's `macos-26` runner.
+
+Sample content is available only to CI and UI review launches through the
+`--use-sample-data` argument. Normal installs start with an empty local library.

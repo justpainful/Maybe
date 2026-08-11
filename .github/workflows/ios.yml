@@ -73,32 +73,32 @@ jobs:
           APP_PATH=$(find DerivedData/Build/Products/Debug-iphonesimulator -maxdepth 2 -name Maybe.app -print -quit)
           xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
 
-          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe
+          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --use-sample-data
           sleep 5
           xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/home.png
 
           xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
-          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --show-add
+          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --use-sample-data --show-add
           sleep 3
           xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/add-sheet.png
 
           xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
-          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --show-inbox
+          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --use-sample-data --show-inbox
           sleep 3
           xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/inbox.png
 
           xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
-          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --show-ideas
+          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --use-sample-data --show-ideas
           sleep 3
           xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/ideas.png
 
           xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
-          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --show-search
+          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --use-sample-data --show-search
           sleep 3
           xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/search.png
 
           xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
-          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --show-settings
+          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --use-sample-data --show-settings
           sleep 3
           xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/settings.png
 

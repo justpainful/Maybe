@@ -366,6 +366,7 @@ struct AddMaybeSheet: View {
                 let attachment = MediaAttachment(
                     type: mediaKind,
                     localPath: path,
+                    thumbnailPath: mediaKind == .image ? try mediaStore.createThumbnail(from: payload) : nil,
                     width: image.map { Double($0.size.width) } ?? 0,
                     height: image.map { Double($0.size.height) } ?? 0,
                     originalFilename: filename,

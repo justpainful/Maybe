@@ -1,7 +1,9 @@
 import CryptoKit
 import Foundation
+import ImageIO
 import SwiftData
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 
 struct LocalMediaStore {
@@ -36,6 +38,27 @@ struct LocalMediaStore {
         return relativePath
     }
 
+    func createThumbnail(from data: Data, maximumPixelSize: Int = 720) throws -> String? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let cgImage = CGImageSourceCreateThumbnailAtIndex(
+                source,
+                0,
+                [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceCreateThumbnailWithTransform: true,
+                    kCGImageSourceThumbnailMaxPixelSize: maximumPixelSize,
+                ] as CFDictionary
+              ),
+              let thumbnailData = UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.82) else {
+            return nil
+        }
+
+        try prepareDirectories()
+        let relativePath = "Thumbnails/\(UUID().uuidString).jpg"
+        try thumbnailData.write(to: rootURL.appending(path: relativePath), options: .atomic)
+        return relativePath
+    }
+
     func data(at relativePath: String) -> Data? {
         try? Data(contentsOf: rootURL.appending(path: relativePath))
     }
@@ -50,6 +73,94 @@ struct LocalMediaStore {
 
     static func hash(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+enum LibraryMutationService {
+    @MainActor
+    static func markReviewed(_ item: SavedItem, in context: ModelContext) throws {
+        item.isInbox = false
+        item.modifiedAt = .now
+        try context.save()
+    }
+
+    @MainActor
+    static func update(
+        _ item: SavedItem,
+        title: String,
+        note: String,
+        sourceURLString: String?,
+        tagNames: [String],
+        isInbox: Bool,
+        in context: ModelContext
+    ) throws {
+        item.title = title
+        item.note = note
+        item.sourceURLString = sourceURLString
+        item.tagNames = tagNames
+        item.isInbox = isInbox
+        item.modifiedAt = .now
+        try context.save()
+    }
+
+    @MainActor
+    static func update(
+        _ idea: Idea,
+        title: String,
+        note: String,
+        tagNames: [String],
+        itemIDs: Set<UUID>,
+        coverItemID: UUID?,
+        from availableItems: [SavedItem],
+        in context: ModelContext
+    ) throws {
+        idea.title = title
+        idea.note = note
+        idea.tagNames = tagNames
+        idea.items = availableItems.filter { itemIDs.contains($0.id) }
+        idea.coverItemID = idea.items.contains(where: { $0.id == coverItemID })
+            ? coverItemID
+            : idea.items.first?.id
+        idea.modifiedAt = .now
+        try context.save()
+        MaybeSharedContainer.publishIdeaTitles(
+            (try context.fetch(FetchDescriptor<Idea>())).map(\.title)
+        )
+    }
+
+    @MainActor
+    static func add(_ item: SavedItem, to idea: Idea, in context: ModelContext) throws {
+        guard !idea.items.contains(where: { $0.id == item.id }) else { return }
+        idea.items.append(item)
+        idea.modifiedAt = .now
+        item.isInbox = false
+        item.modifiedAt = .now
+        try context.save()
+    }
+
+    @MainActor
+    static func delete(
+        _ item: SavedItem,
+        in context: ModelContext,
+        mediaStore: LocalMediaStore = .init()
+    ) throws {
+        for attachment in item.media {
+            mediaStore.remove(at: attachment.localPath)
+            if let thumbnailPath = attachment.thumbnailPath {
+                mediaStore.remove(at: thumbnailPath)
+            }
+        }
+        context.delete(item)
+        try context.save()
+    }
+
+    @MainActor
+    static func delete(_ idea: Idea, in context: ModelContext) throws {
+        context.delete(idea)
+        try context.save()
+        MaybeSharedContainer.publishIdeaTitles(
+            (try context.fetch(FetchDescriptor<Idea>())).map(\.title)
+        )
     }
 }
 
@@ -115,6 +226,7 @@ enum ShareInboxImporter {
                         MediaAttachment(
                             type: mediaKind,
                             localPath: path,
+                            thumbnailPath: mediaKind == .image ? try? mediaStore.createThumbnail(from: payload) : nil,
                             originalFilename: record.originalFilename ?? "shared-item",
                             sha256: hash,
                             item: item
@@ -305,6 +417,7 @@ enum LibraryArchiveService {
                         id: media.id,
                         type: kind,
                         localPath: relativePath,
+                        thumbnailPath: kind == .image ? try? mediaStore.createThumbnail(from: payload) : nil,
                         width: media.width,
                         height: media.height,
                         originalFilename: media.originalFilename,

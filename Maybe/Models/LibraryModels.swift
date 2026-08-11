@@ -1,6 +1,22 @@
 import Foundation
 import SwiftData
 
+enum MaybeSchemaV1: VersionedSchema {
+    static var versionIdentifier = Schema.Version(1, 0, 0)
+
+    static var models: [any PersistentModel.Type] {
+        [SavedItem.self, Idea.self, MediaAttachment.self]
+    }
+}
+
+enum MaybeMigrationPlan: SchemaMigrationPlan {
+    static var schemas: [any VersionedSchema.Type] {
+        [MaybeSchemaV1.self]
+    }
+
+    static var stages: [MigrationStage] { [] }
+}
+
 enum MaybeKind: String, Codable, CaseIterable, Identifiable {
     case photo
     case link

@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 import Testing
 @testable import Maybe
 
@@ -50,5 +51,44 @@ struct MaybeTests {
         )
 
         #expect(ResurfacingEngine.score(olderFavorite, now: now) > ResurfacingEngine.score(fresh, now: now))
+    }
+
+    @Test("Inbox items can be marked reviewed")
+    @MainActor
+    func inboxReviewPersists() throws {
+        let schema = Schema(versionedSchema: MaybeSchemaV1.self)
+        let container = try ModelContainer(
+            for: MaybeSchemaV1.self,
+            migrationPlan: MaybeMigrationPlan.self,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let item = SavedItem(kind: .note, title: "Review me", isInbox: true)
+        container.mainContext.insert(item)
+
+        try LibraryMutationService.markReviewed(item, in: container.mainContext)
+
+        #expect(item.isInbox == false)
+        #expect(item.modifiedAt <= .now)
+    }
+
+    @Test("Deleting an idea keeps its saved items")
+    @MainActor
+    func deletingIdeaPreservesItems() throws {
+        let schema = Schema(versionedSchema: MaybeSchemaV1.self)
+        let container = try ModelContainer(
+            for: MaybeSchemaV1.self,
+            migrationPlan: MaybeMigrationPlan.self,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let item = SavedItem(kind: .photo, title: "Reference")
+        let idea = Idea(title: "Draft", items: [item])
+        container.mainContext.insert(item)
+        container.mainContext.insert(idea)
+        try container.mainContext.save()
+
+        try LibraryMutationService.delete(idea, in: container.mainContext)
+
+        #expect(try container.mainContext.fetch(FetchDescriptor<Idea>()).isEmpty)
+        #expect(try container.mainContext.fetch(FetchDescriptor<SavedItem>()).count == 1)
     }
 }

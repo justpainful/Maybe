@@ -23,10 +23,13 @@ enum AppSheet: Identifiable {
 }
 
 struct AppShellView: View {
+    let startupIssue: String?
     @State private var selectedTab: AppTab = .home
     @State private var presentedSheet: AppSheet?
+    @State private var isShowingStartupIssue = false
 
-    init() {
+    init(startupIssue: String? = nil) {
+        self.startupIssue = startupIssue
         let arguments = ProcessInfo.processInfo.arguments
         let initialSheet: AppSheet? = if arguments.contains("--show-add") {
             .add
@@ -96,6 +99,14 @@ struct AppShellView: View {
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             }
+        }
+        .task {
+            isShowingStartupIssue = startupIssue != nil
+        }
+        .alert("Local library unavailable", isPresented: $isShowingStartupIssue) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(startupIssue ?? "Please relaunch Maybe.")
         }
     }
 }

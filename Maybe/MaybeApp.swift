@@ -4,28 +4,37 @@ import SwiftUI
 @main
 struct MaybeApp: App {
     private let modelContainer: ModelContainer
+    private let startupIssue: String?
 
     init() {
-        let schema = Schema([
-            SavedItem.self,
-            Idea.self,
-            MediaAttachment.self,
-        ])
+        let schema = Schema(versionedSchema: MaybeSchemaV1.self)
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
         do {
-            modelContainer = try ModelContainer(for: schema, configurations: [configuration])
+            modelContainer = try ModelContainer(
+                for: MaybeSchemaV1.self,
+                migrationPlan: MaybeMigrationPlan.self,
+                configurations: [configuration]
+            )
+            startupIssue = nil
         } catch {
-            fatalError("Unable to create Maybe's local library: \(error)")
+            modelContainer = try! ModelContainer(
+                for: MaybeSchemaV1.self,
+                migrationPlan: MaybeMigrationPlan.self,
+                configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+            )
+            startupIssue = "Maybe couldn’t open the local library. This session is temporary; export or change nothing until the library is repaired. \(error.localizedDescription)"
         }
     }
 
     var body: some Scene {
         WindowGroup {
-            AppShellView()
+            AppShellView(startupIssue: startupIssue)
                 .preferredColorScheme(.light)
                 .task {
-                    SampleLibrarySeeder.seedIfNeeded(in: modelContainer.mainContext)
+                    if ProcessInfo.processInfo.arguments.contains("--use-sample-data") {
+                        SampleLibrarySeeder.seedIfNeeded(in: modelContainer.mainContext)
+                    }
                     _ = ShareInboxImporter.importPending(into: modelContainer.mainContext)
                     let ideas = (try? modelContainer.mainContext.fetch(FetchDescriptor<Idea>())) ?? []
                     MaybeSharedContainer.publishIdeaTitles(ideas.map(\.title))
