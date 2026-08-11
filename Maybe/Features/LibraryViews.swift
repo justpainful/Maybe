@@ -227,12 +227,17 @@ struct InboxView: View {
                             .foregroundStyle(MaybePalette.ink.opacity(0.56))
                     }
                     Spacer()
-                    Image(systemName: "tray.full.fill")
-                        .font(.system(size: 19, weight: .bold))
-                        .frame(width: 46, height: 44)
-                        .background(MaybePalette.blue.opacity(0.82), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(Color.white.opacity(0.8), lineWidth: 1))
-                        .shadow(color: MaybePalette.ink.opacity(0.12), radius: 1, y: 3)
+                    Button(action: reviewAll) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 19, weight: .bold))
+                            .frame(width: 44, height: 44)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.roundedRectangle(radius: 15))
+                    .tint(MaybePalette.blue.opacity(0.72))
+                    .foregroundStyle(MaybePalette.ink)
+                    .disabled(allItems.allSatisfy { !$0.isInbox })
+                    .accessibilityLabel("Mark all Inbox items reviewed")
                 }
 
                 filters
@@ -358,6 +363,18 @@ struct InboxView: View {
     private func review(_ item: SavedItem) {
         do {
             try LibraryMutationService.markReviewed(item, in: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func reviewAll() {
+        do {
+            for item in allItems where item.isInbox {
+                item.isInbox = false
+                item.modifiedAt = .now
+            }
+            try modelContext.save()
         } catch {
             errorMessage = error.localizedDescription
         }

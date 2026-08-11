@@ -769,12 +769,19 @@ struct ItemDetailView: View {
 
                     if let source = item.sourceURLString, !source.isEmpty {
                         detailPanel(title: "Source", symbol: "link") {
-                            Link(destination: URL(string: source) ?? URL(string: "https://example.com")!) {
-                                HStack {
-                                    Text(URL(string: source)?.host() ?? source)
-                                    Spacer()
-                                    Image(systemName: "arrow.up.right")
+                            if let sourceURL = URL(string: source) {
+                                Link(destination: sourceURL) {
+                                    HStack {
+                                        Text(sourceURL.host() ?? source)
+                                        Spacer()
+                                        Image(systemName: "arrow.up.right")
+                                    }
+                                    .font(.system(.headline, design: .rounded, weight: .bold))
+                                    .foregroundStyle(MaybePalette.ink)
                                 }
+                            } else {
+                                Text(source)
+                                    .textSelection(.enabled)
                                 .font(.system(.headline, design: .rounded, weight: .bold))
                                 .foregroundStyle(MaybePalette.ink)
                             }
