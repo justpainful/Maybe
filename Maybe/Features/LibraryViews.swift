@@ -7,6 +7,7 @@ struct HomeView: View {
     @State private var surpriseItem: SavedItem?
 
     let onSettings: () -> Void
+    let onAdd: () -> Void
 
     var body: some View {
         ScrollView {
@@ -21,10 +22,14 @@ struct HomeView: View {
                         .foregroundStyle(MaybePalette.ink.opacity(0.58))
                 }
 
-                recentlySection
-                ideasSection
-                againSection
-                surpriseSection
+                if items.isEmpty && ideas.isEmpty {
+                    firstRunSection
+                } else {
+                    recentlySection
+                    againSection
+                    ideasSection
+                    surpriseSection
+                }
             }
             .padding(.horizontal, MaybeMetrics.pageInset)
             .padding(.top, 10)
@@ -34,6 +39,25 @@ struct HomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(item: $surpriseItem) { item in
             SurpriseView(initialItem: item)
+        }
+    }
+
+    private var firstRunSection: some View {
+        VStack(spacing: 20) {
+            EmptyLibraryView(
+                symbol: "sparkles.rectangle.stack",
+                title: "Catch your first Maybe",
+                message: "Save a photo, link, note, or file. Everything stays on this device."
+            )
+            Button(action: onAdd) {
+                Label("Add to Maybe", systemImage: "plus")
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.roundedRectangle(radius: 20))
+            .tint(MaybePalette.purple)
+            .foregroundStyle(MaybePalette.ink)
         }
     }
 
@@ -154,16 +178,20 @@ struct HomeView: View {
 }
 
 struct InboxView: View {
+    @Environment(\.modelContext) private var modelContext
     @Query(sort: \SavedItem.createdAt, order: .reverse) private var allItems: [SavedItem]
     @State private var selectedKind: MaybeKind?
     @State private var favoritesOnly = false
+    @State private var editingItem: SavedItem?
+    @State private var ideaItem: SavedItem?
+    @State private var deleteCandidate: SavedItem?
+    @State private var errorMessage: String?
 
     private let columns = [GridItem(.adaptive(minimum: 150), spacing: 12)]
-    private let filterColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
 
     private var items: [SavedItem] {
         allItems.filter { item in
-            (item.isInbox || selectedKind != nil || favoritesOnly)
+            item.isInbox
                 && (selectedKind == nil || item.kind == selectedKind)
                 && (!favoritesOnly || item.isFavorite)
         }
@@ -199,12 +227,47 @@ struct InboxView: View {
                 } else {
                     LazyVGrid(columns: columns, spacing: 16) {
                         ForEach(items) { item in
-                            NavigationLink {
-                                ItemDetailView(item: item)
-                            } label: {
-                                SavedCard(item: item, width: nil)
+                            ZStack(alignment: .topTrailing) {
+                                NavigationLink {
+                                    ItemDetailView(item: item)
+                                } label: {
+                                    SavedCard(item: item, width: nil)
+                                }
+                                .buttonStyle(.plain)
+
+                                Menu {
+                                    Button { review(item) } label: {
+                                        Label("Mark reviewed", systemImage: "checkmark.circle")
+                                    }
+                                    Button { ideaItem = item } label: {
+                                        Label("Add to idea", systemImage: "lightbulb.max.fill")
+                                    }
+                                    Button { editingItem = item } label: {
+                                        Label("Edit", systemImage: "pencil")
+                                    }
+                                    Button {
+                                        item.isFavorite.toggle()
+                                        item.modifiedAt = .now
+                                        try? modelContext.save()
+                                    } label: {
+                                        Label(item.isFavorite ? "Remove favorite" : "Favorite", systemImage: item.isFavorite ? "heart.slash" : "heart")
+                                    }
+                                    Divider()
+                                    Button(role: .destructive) { deleteCandidate = item } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                        .font(.system(size: 15, weight: .bold))
+                                        .frame(width: 40, height: 40)
+                                }
+                                .buttonStyle(.glass)
+                                .buttonBorderShape(.circle)
+                                .tint(MaybePalette.glassWhite.opacity(0.72))
+                                .foregroundStyle(MaybePalette.ink)
+                                .padding(12)
+                                .accessibilityLabel("Actions for \(item.title)")
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -215,30 +278,80 @@ struct InboxView: View {
         }
         .background(CreamCanvas())
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(item: $editingItem) { item in
+            EditItemSheet(item: item)
+                .presentationDetents([.large])
+        }
+        .sheet(item: $ideaItem) { item in
+            AddToIdeaSheet(item: item)
+                .presentationDetents([.medium, .large])
+        }
+        .confirmationDialog("Delete this Maybe?", isPresented: deleteBinding, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) { deleteSelected() }
+            Button("Cancel", role: .cancel) { deleteCandidate = nil }
+        } message: {
+            Text("Its local media will also be removed.")
+        }
+        .alert("Couldn’t update Inbox", isPresented: errorBinding) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "Please try again.")
+        }
     }
 
     private var filters: some View {
-        LazyVGrid(columns: filterColumns, spacing: 9) {
-            Button {
-                selectedKind = nil
-                favoritesOnly = false
-            } label: {
-                FilterKeycap(name: "All", color: MaybePalette.yellow, selected: selectedKind == nil && !favoritesOnly)
-            }
-            Button {
-                favoritesOnly.toggle()
-            } label: {
-                FilterKeycap(name: "Favorites", color: MaybePalette.coral, selected: favoritesOnly)
-            }
-            ForEach(MaybeKind.allCases) { kind in
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 9) {
                 Button {
-                    selectedKind = selectedKind == kind ? nil : kind
+                    selectedKind = nil
+                    favoritesOnly = false
                 } label: {
-                    FilterKeycap(name: kind.title, color: Color(hex: accent(for: kind)), selected: selectedKind == kind)
+                    FilterKeycap(name: "All", color: MaybePalette.yellow, selected: selectedKind == nil && !favoritesOnly)
+                }
+                Button {
+                    favoritesOnly.toggle()
+                } label: {
+                    FilterKeycap(name: "Favorites", color: MaybePalette.coral, selected: favoritesOnly)
+                }
+                ForEach(MaybeKind.allCases) { kind in
+                    Button {
+                        selectedKind = selectedKind == kind ? nil : kind
+                    } label: {
+                        FilterKeycap(name: kind.title, color: Color(hex: accent(for: kind)), selected: selectedKind == kind)
+                    }
                 }
             }
+            .padding(.vertical, 5)
         }
         .buttonStyle(.plain)
+        .scrollEdgeEffectHidden(true, for: .all)
+        .scrollClipDisabled()
+    }
+
+    private var deleteBinding: Binding<Bool> {
+        Binding(get: { deleteCandidate != nil }, set: { if !$0 { deleteCandidate = nil } })
+    }
+
+    private var errorBinding: Binding<Bool> {
+        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+    }
+
+    private func review(_ item: SavedItem) {
+        do {
+            try LibraryMutationService.markReviewed(item, in: modelContext)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteSelected() {
+        guard let item = deleteCandidate else { return }
+        do {
+            try LibraryMutationService.delete(item, in: modelContext)
+            deleteCandidate = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func accent(for kind: MaybeKind) -> String {
@@ -309,16 +422,12 @@ private struct FilterKeycap: View {
         Text(name)
             .font(.system(.caption, design: .rounded, weight: .bold))
             .foregroundStyle(MaybePalette.ink)
-            .frame(maxWidth: .infinity)
-            .frame(height: 38)
-            .background((selected ? color : color.opacity(0.58)), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay(alignment: .top) {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .stroke(Color.white.opacity(0.82), lineWidth: 1)
-                    .padding(1)
-            }
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(MaybePalette.ink.opacity(selected ? 0.2 : 0.1), lineWidth: 1))
-            .shadow(color: MaybePalette.ink.opacity(0.12), radius: 0.5, y: selected ? 3 : 2)
+            .padding(.horizontal, 15)
+            .frame(minHeight: 44)
+            .background(selected ? color.opacity(0.46) : Color.white.opacity(0.14), in: Capsule())
+            .glassEffect(.regular.tint(color.opacity(selected ? 0.28 : 0.08)).interactive(), in: Capsule())
+            .overlay(Capsule().stroke(Color.white.opacity(0.75), lineWidth: 1))
+            .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 
@@ -326,7 +435,6 @@ struct LibrarySearchView: View {
     @Query(sort: \SavedItem.createdAt, order: .reverse) private var items: [SavedItem]
     @State private var searchText = ""
     @State private var selectedKind: MaybeKind?
-    private let filterColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
 
     private var results: [SavedItem] {
         items.filter { item in
@@ -339,6 +447,8 @@ struct LibrarySearchView: View {
                 item.sourceURLString ?? "",
                 item.tagNames.joined(separator: " "),
                 item.ideas.map(\.title).joined(separator: " "),
+                item.media.map(\.originalFilename).joined(separator: " "),
+                item.createdAt.formatted(date: .long, time: .omitted),
             ].joined(separator: " ")
             return haystack.localizedCaseInsensitiveContains(searchText)
         }
@@ -347,19 +457,22 @@ struct LibrarySearchView: View {
     var body: some View {
         List {
             Section {
-                LazyVGrid(columns: filterColumns, spacing: 9) {
-                    Button {
-                        selectedKind = nil
-                    } label: {
-                        FilterKeycap(name: "All", color: MaybePalette.yellow, selected: selectedKind == nil)
-                    }
-                    ForEach(MaybeKind.allCases) { kind in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 9) {
                         Button {
-                            selectedKind = selectedKind == kind ? nil : kind
+                            selectedKind = nil
                         } label: {
-                            FilterKeycap(name: kind.title, color: accent(for: kind), selected: selectedKind == kind)
+                            FilterKeycap(name: "All", color: MaybePalette.yellow, selected: selectedKind == nil)
+                        }
+                        ForEach(MaybeKind.allCases) { kind in
+                            Button {
+                                selectedKind = selectedKind == kind ? nil : kind
+                            } label: {
+                                FilterKeycap(name: kind.title, color: accent(for: kind), selected: selectedKind == kind)
+                            }
                         }
                     }
+                    .padding(.vertical, 5)
                 }
                 .buttonStyle(.plain)
                 .listRowBackground(Color.clear)

@@ -224,12 +224,14 @@ struct SavedCard: View {
 
 struct InspirationThumbnail: View {
     let item: SavedItem
+    var prefersOriginal = false
     private let mediaStore = LocalMediaStore()
+    @State private var loadedImage: UIImage?
 
     var body: some View {
         if let attachment = item.media.first,
            attachment.type == .image,
-           let image = UIImage(contentsOfFile: mediaStore.url(at: attachment.localPath).path) {
+           let image = loadedImage {
             Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
@@ -238,6 +240,21 @@ struct InspirationThumbnail: View {
             generatedArtwork
                 .accessibilityLabel("Preview for \(item.title)")
         }
+        .task(id: imagePath) {
+            loadedImage = nil
+            guard let imagePath else { return }
+            let url = mediaStore.url(at: imagePath)
+            let data = await Task.detached(priority: .utility) {
+                try? Data(contentsOf: url, options: [.mappedIfSafe])
+            }.value
+            guard !Task.isCancelled, let data else { return }
+            loadedImage = UIImage(data: data)
+        }
+    }
+
+    private var imagePath: String? {
+        guard let attachment = item.media.first, attachment.type == .image else { return nil }
+        return prefersOriginal ? attachment.localPath : (attachment.thumbnailPath ?? attachment.localPath)
     }
 
     @ViewBuilder
@@ -341,6 +358,14 @@ struct IdeaCard: View {
     let idea: Idea
     var compact = false
 
+    private var previewItems: [SavedItem] {
+        guard let coverID = idea.coverItemID,
+              let cover = idea.items.first(where: { $0.id == coverID }) else {
+            return Array(idea.items.prefix(3))
+        }
+        return [cover] + Array(idea.items.filter { $0.id != coverID }.prefix(2))
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ZStack {
@@ -348,7 +373,7 @@ struct IdeaCard: View {
                     .fill(Color(hex: idea.accentHex).opacity(0.3))
 
                 HStack(spacing: -28) {
-                    ForEach(Array(idea.items.prefix(3).enumerated()), id: \.element.id) { index, item in
+                    ForEach(Array(previewItems.enumerated()), id: \.element.id) { index, item in
                         InspirationThumbnail(item: item)
                             .frame(width: compact ? 76 : 94, height: compact ? 88 : 108)
                             .clipShape(RoundedRectangle(cornerRadius: 17, style: .continuous))

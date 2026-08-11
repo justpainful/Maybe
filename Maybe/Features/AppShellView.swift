@@ -56,9 +56,10 @@ struct AppShellView: View {
             switch selectedTab {
             case .home:
                 NavigationStack {
-                    HomeView {
-                        presentedSheet = .settings
-                    }
+                    HomeView(
+                        onSettings: { presentedSheet = .settings },
+                        onAdd: { presentedSheet = .add }
+                    )
                 }
             case .inbox:
                 NavigationStack {

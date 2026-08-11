@@ -15,6 +15,7 @@
 		B00000000000000000000006 /* AppShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000006 /* AppShellView.swift */; };
 		B00000000000000000000007 /* LibraryViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000007 /* LibraryViews.swift */; };
 		B00000000000000000000008 /* ComposerAndDetailViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000008 /* ComposerAndDetailViews.swift */; };
+		B00000000000000000000017 /* LibraryEditors.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000017 /* LibraryEditors.swift */; };
 		B00000000000000000000009 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000009 /* SettingsView.swift */; };
 		B00000000000000000000010 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000010 /* Assets.xcassets */; };
 		B00000000000000000000011 /* MaybeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000011 /* MaybeTests.swift */; };
@@ -64,6 +65,7 @@
 		A00000000000000000000006 /* AppShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppShellView.swift; sourceTree = "<group>"; };
 		A00000000000000000000007 /* LibraryViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViews.swift; sourceTree = "<group>"; };
 		A00000000000000000000008 /* ComposerAndDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerAndDetailViews.swift; sourceTree = "<group>"; };
+		A00000000000000000000017 /* LibraryEditors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryEditors.swift; sourceTree = "<group>"; };
 		A00000000000000000000009 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A00000000000000000000010 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A00000000000000000000011 /* MaybeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaybeTests.swift; sourceTree = "<group>"; };
@@ -158,6 +160,7 @@
 				A00000000000000000000006 /* AppShellView.swift */,
 				A00000000000000000000007 /* LibraryViews.swift */,
 				A00000000000000000000008 /* ComposerAndDetailViews.swift */,
+				A00000000000000000000017 /* LibraryEditors.swift */,
 				A00000000000000000000009 /* SettingsView.swift */,
 			);
 			path = Features;
@@ -335,6 +338,7 @@
 				B00000000000000000000006 /* AppShellView.swift in Sources */,
 				B00000000000000000000007 /* LibraryViews.swift in Sources */,
 				B00000000000000000000008 /* ComposerAndDetailViews.swift in Sources */,
+				B00000000000000000000017 /* LibraryEditors.swift in Sources */,
 				B00000000000000000000009 /* SettingsView.swift in Sources */,
 				B00000000000000000000012 /* SharedCapture.swift in Sources */,
 			);

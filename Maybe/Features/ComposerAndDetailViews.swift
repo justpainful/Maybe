@@ -482,11 +482,15 @@ struct NewIdeaSheet: View {
     let preselectedItem: SavedItem?
     @State private var title = ""
     @State private var note = ""
+    @State private var tags = ""
     @State private var selectedIDs: Set<UUID>
+    @State private var coverItemID: UUID?
+    @State private var errorMessage: String?
 
     init(preselectedItem: SavedItem?) {
         self.preselectedItem = preselectedItem
         _selectedIDs = State(initialValue: Set(preselectedItem.map { [$0.id] } ?? []))
+        _coverItemID = State(initialValue: preselectedItem?.id)
     }
 
     var body: some View {
@@ -508,6 +512,10 @@ struct NewIdeaSheet: View {
                                 .padding(17)
                                 .background(Color.white.opacity(0.45), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
                                 .maybeGlass(cornerRadius: 21)
+                            TextField("Tags, separated by commas", text: $tags)
+                                .padding(17)
+                                .background(Color.white.opacity(0.45), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
+                                .maybeGlass(cornerRadius: 21)
                         }
 
                         VStack(alignment: .leading, spacing: 11) {
@@ -522,8 +530,10 @@ struct NewIdeaSheet: View {
                                     Button {
                                         if selectedIDs.contains(item.id) {
                                             selectedIDs.remove(item.id)
+                                            if coverItemID == item.id { coverItemID = nil }
                                         } else {
                                             selectedIDs.insert(item.id)
+                                            if coverItemID == nil { coverItemID = item.id }
                                         }
                                     } label: {
                                         InspirationThumbnail(item: item)
@@ -549,6 +559,24 @@ struct NewIdeaSheet: View {
                             }
                         }
 
+                        if !selectedIDs.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Cover")
+                                    .font(.maybeRounded(22, weight: .bold))
+                                Picker("Cover Maybe", selection: $coverItemID) {
+                                    Text("Automatic").tag(UUID?.none)
+                                    ForEach(items.filter { selectedIDs.contains($0.id) }) { item in
+                                        Text(item.title).tag(UUID?.some(item.id))
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                .padding(.horizontal, 14)
+                                .background(Color.white.opacity(0.32), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                                .maybeGlass(cornerRadius: 18)
+                            }
+                        }
+
                         Button(action: save) {
                             Label("Create idea", systemImage: "lightbulb.fill")
                                 .frame(maxWidth: .infinity)
@@ -567,39 +595,70 @@ struct NewIdeaSheet: View {
                     Button("Close") { dismiss() }
                 }
             }
+            .alert("Couldn’t create the idea", isPresented: errorBinding) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "Please try again.")
+            }
         }
+    }
+
+    private var errorBinding: Binding<Bool> {
+        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
     }
 
     private func save() {
         let selectedItems = items.filter { selectedIDs.contains($0.id) }
+        let typedTags = tags.split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
         let idea = Idea(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             note: note.trimmingCharacters(in: .whitespacesAndNewlines),
-            coverItemID: selectedItems.first?.id,
-            tagNames: Array(Set(selectedItems.flatMap(\.tagNames))).sorted(),
+            coverItemID: coverItemID ?? selectedItems.first?.id,
+            tagNames: Array(Set(typedTags + selectedItems.flatMap(\.tagNames))).sorted(),
             accentHex: MaybePalette.accentHexes[selectedIDs.count % MaybePalette.accentHexes.count],
             items: selectedItems
         )
         modelContext.insert(idea)
-        try? modelContext.save()
-        let allIdeaTitles = ((try? modelContext.fetch(FetchDescriptor<Idea>())) ?? []).map(\.title)
-        MaybeSharedContainer.publishIdeaTitles(allIdeaTitles)
-        dismiss()
+        selectedItems.forEach {
+            $0.isInbox = false
+            $0.modifiedAt = .now
+        }
+        do {
+            try modelContext.save()
+            let allIdeaTitles = (try modelContext.fetch(FetchDescriptor<Idea>())).map(\.title)
+            MaybeSharedContainer.publishIdeaTitles(allIdeaTitles)
+            dismiss()
+        } catch {
+            modelContext.delete(idea)
+            errorMessage = error.localizedDescription
+        }
     }
 }
 
 struct ItemDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     let item: SavedItem
     @State private var ideaSeed: SavedItem?
+    @State private var isEditing = false
+    @State private var isAddingToIdea = false
+    @State private var previewAttachment: MediaAttachment?
 
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                InspirationThumbnail(item: item)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 420)
-                    .clipped()
+                Button {
+                    previewAttachment = item.media.first
+                } label: {
+                    InspirationThumbnail(item: item, prefersOriginal: true)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 420)
+                        .clipped()
+                }
+                .buttonStyle(.plain)
+                .disabled(item.media.isEmpty)
 
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -610,6 +669,7 @@ struct ItemDetailView: View {
                             Button {
                                 item.isFavorite.toggle()
                                 item.modifiedAt = .now
+                                try? modelContext.save()
                             } label: {
                                 Image(systemName: item.isFavorite ? "heart.fill" : "heart")
                                     .foregroundStyle(item.isFavorite ? MaybePalette.coral : MaybePalette.ink)
@@ -671,13 +731,54 @@ struct ItemDetailView: View {
                         }
                     }
 
-                    Button {
-                        ideaSeed = item
-                    } label: {
-                        Label("Make an idea from this", systemImage: "lightbulb.max.fill")
-                            .frame(maxWidth: .infinity)
+                    if let attachment = item.media.first {
+                        detailPanel(title: "Local file", symbol: "internaldrive.fill") {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(attachment.originalFilename)
+                                        .font(.system(.headline, design: .rounded, weight: .bold))
+                                        .lineLimit(2)
+                                    Text("Stored only on this device")
+                                        .font(.caption)
+                                        .foregroundStyle(MaybePalette.ink.opacity(0.56))
+                                }
+                                Spacer()
+                                ShareLink(item: LocalMediaStore().url(at: attachment.localPath)) {
+                                    Image(systemName: "square.and.arrow.up")
+                                        .frame(width: 44, height: 44)
+                                }
+                                .buttonStyle(.glass)
+                                .buttonBorderShape(.circle)
+                                .accessibilityLabel("Share local file")
+                            }
+                        }
                     }
-                    .buttonStyle(KeycapButtonStyle(color: MaybePalette.yellow, cornerRadius: 22))
+
+                    VStack(spacing: 12) {
+                        Button {
+                            isAddingToIdea = true
+                        } label: {
+                            Label("Add to an idea", systemImage: "plus.circle.fill")
+                                .frame(maxWidth: .infinity)
+                                .frame(minHeight: 44)
+                        }
+                        .buttonStyle(.glassProminent)
+                        .buttonBorderShape(.roundedRectangle(radius: 20))
+                        .tint(MaybePalette.purple)
+                        .foregroundStyle(MaybePalette.ink)
+
+                        Button {
+                            ideaSeed = item
+                        } label: {
+                            Label("Make a new idea from this", systemImage: "lightbulb.max.fill")
+                                .frame(maxWidth: .infinity)
+                                .frame(minHeight: 44)
+                        }
+                        .buttonStyle(.glass)
+                        .buttonBorderShape(.roundedRectangle(radius: 20))
+                        .tint(MaybePalette.yellow.opacity(0.58))
+                        .foregroundStyle(MaybePalette.ink)
+                    }
                 }
                 .padding(20)
                 .padding(.bottom, 30)
@@ -686,6 +787,16 @@ struct ItemDetailView: View {
         }
         .ignoresSafeArea(edges: .top)
         .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isEditing = true
+                } label: {
+                    Image(systemName: "pencil")
+                }
+                .accessibilityLabel("Edit Maybe")
+            }
+        }
         .task {
             item.lastViewedAt = .now
             try? modelContext.save()
@@ -693,6 +804,17 @@ struct ItemDetailView: View {
         .sheet(item: $ideaSeed) { seed in
             NewIdeaSheet(preselectedItem: seed)
                 .presentationDetents([.medium, .large])
+        }
+        .sheet(isPresented: $isEditing) {
+            EditItemSheet(item: item, onDeleted: { dismiss() })
+                .presentationDetents([.large])
+        }
+        .sheet(isPresented: $isAddingToIdea) {
+            AddToIdeaSheet(item: item)
+                .presentationDetents([.medium, .large])
+        }
+        .sheet(item: $previewAttachment) { attachment in
+            LocalMediaPreview(attachment: attachment, title: item.title)
         }
     }
 
@@ -714,8 +836,10 @@ struct ItemDetailView: View {
 }
 
 struct IdeaDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     let idea: Idea
     private let columns = [GridItem(.adaptive(minimum: 145), spacing: 13)]
+    @State private var isEditing = false
 
     var body: some View {
         ScrollView {
@@ -757,13 +881,29 @@ struct IdeaDetailView: View {
         }
         .background(CreamCanvas())
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    isEditing = true
+                } label: {
+                    Image(systemName: "pencil")
+                }
+                .accessibilityLabel("Edit Idea")
+            }
+        }
+        .sheet(isPresented: $isEditing) {
+            EditIdeaSheet(idea: idea, onDeleted: { dismiss() })
+                .presentationDetents([.large])
+        }
     }
 }
 
 struct SurpriseView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Query private var items: [SavedItem]
     @State private var currentItem: SavedItem
+    @State private var isAddingToIdea = false
 
     init(initialItem: SavedItem) {
         _currentItem = State(initialValue: initialItem)
@@ -803,10 +943,19 @@ struct SurpriseView: View {
                 HStack(spacing: 12) {
                     Button {
                         currentItem.isFavorite = true
+                        currentItem.modifiedAt = .now
+                        try? modelContext.save()
                     } label: {
                         Label("Keep around", systemImage: "heart.fill")
                     }
                     .buttonStyle(KeycapButtonStyle(color: MaybePalette.coral, cornerRadius: 20))
+
+                    Button {
+                        isAddingToIdea = true
+                    } label: {
+                        Label("Idea", systemImage: "lightbulb.fill")
+                    }
+                    .buttonStyle(KeycapButtonStyle(color: MaybePalette.green, cornerRadius: 20))
 
                     Button {
                         if let next = items.filter({ $0.id != currentItem.id }).randomElement() {
@@ -821,6 +970,60 @@ struct SurpriseView: View {
                 }
             }
             .padding(20)
+        }
+        .task { viewed(currentItem) }
+        .onChange(of: currentItem.id) { _, _ in viewed(currentItem) }
+        .sheet(isPresented: $isAddingToIdea) {
+            AddToIdeaSheet(item: currentItem)
+                .presentationDetents([.medium, .large])
+        }
+    }
+
+    private func viewed(_ item: SavedItem) {
+        item.lastViewedAt = .now
+        try? modelContext.save()
+    }
+}
+
+private struct LocalMediaPreview: View {
+    @Environment(\.dismiss) private var dismiss
+    let attachment: MediaAttachment
+    let title: String
+
+    private let mediaStore = LocalMediaStore()
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                MaybePalette.ink.ignoresSafeArea()
+                if attachment.type == .image,
+                   let image = UIImage(contentsOfFile: mediaStore.url(at: attachment.localPath).path) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .accessibilityLabel(title)
+                } else {
+                    ContentUnavailableView(
+                        "Preview unavailable",
+                        systemImage: "doc.fill",
+                        description: Text(attachment.originalFilename)
+                    )
+                    .foregroundStyle(.white)
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    ShareLink(item: mediaStore.url(at: attachment.localPath)) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .accessibilityLabel("Share file")
+                }
+            }
         }
     }
 }
