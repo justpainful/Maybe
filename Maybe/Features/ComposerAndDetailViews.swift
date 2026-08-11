@@ -330,7 +330,7 @@ struct AddMaybeSheet: View {
     private var canSave: Bool {
         switch kind {
         case .photo:
-            !photoPayloads.isEmpty
+            return !photoPayloads.isEmpty
         case .link:
             guard let url = URL(string: sourceURL.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
             return ["http", "https"].contains(url.scheme?.lowercased() ?? "")

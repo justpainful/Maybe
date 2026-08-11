@@ -481,7 +481,7 @@ struct LibrarySearchView: View {
 
     private var results: [SavedItem] {
         guard !showsIdeas else { return [] }
-        items.filter { item in
+        return items.filter { item in
             let matchesKind = selectedKind == nil || item.kind == selectedKind
             guard matchesKind else { return false }
             guard !searchText.isEmpty else { return true }
