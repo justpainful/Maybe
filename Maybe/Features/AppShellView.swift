@@ -106,18 +106,23 @@ private struct MaybeTabBar: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            tabButton(.home, title: "Home", symbol: "house.fill", color: MaybePalette.coral)
-            tabButton(.inbox, title: "Inbox", symbol: "tray.full.fill", color: MaybePalette.blue)
+            tabButton(.home, title: "Home", symbol: "house", selectedSymbol: "house.fill", color: MaybePalette.coral)
+            tabButton(.inbox, title: "Inbox", symbol: "tray", selectedSymbol: "tray.full.fill", color: MaybePalette.blue)
 
             Button(action: onAdd) {
                 Image(systemName: "plus")
+                    .font(.system(size: 20, weight: .bold))
+                    .frame(width: 34, height: 34)
             }
-            .buttonStyle(RoundKeycapButtonStyle(color: MaybePalette.purple, size: 52))
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.circle)
+            .tint(MaybePalette.purple)
+            .foregroundStyle(MaybePalette.ink)
             .accessibilityLabel("Add to Maybe")
             .accessibilityIdentifier("add-button")
 
-            tabButton(.ideas, title: "Ideas", symbol: "lightbulb.max.fill", color: MaybePalette.yellow)
-            tabButton(.search, title: "Find", symbol: "magnifyingglass", color: MaybePalette.green)
+            tabButton(.ideas, title: "Ideas", symbol: "lightbulb.max", selectedSymbol: "lightbulb.max.fill", color: MaybePalette.yellow)
+            tabButton(.search, title: "Find", symbol: "magnifyingglass", selectedSymbol: "magnifyingglass", color: MaybePalette.green)
         }
         .padding(7)
         .background(Color.white.opacity(0.18), in: Capsule())
@@ -126,15 +131,22 @@ private struct MaybeTabBar: View {
         .shadow(color: MaybePalette.ink.opacity(0.16), radius: 7, y: 5)
     }
 
-    private func tabButton(_ tab: AppTab, title: String, symbol: String, color: Color) -> some View {
+    private func tabButton(
+        _ tab: AppTab,
+        title: String,
+        symbol: String,
+        selectedSymbol: String,
+        color: Color
+    ) -> some View {
         Button {
             withAnimation(.snappy(duration: 0.24)) {
                 selection = tab
             }
         } label: {
             VStack(spacing: 3) {
-                Image(systemName: symbol)
-                    .font(.system(size: 18, weight: .bold))
+                Image(systemName: selection == tab ? selectedSymbol : symbol)
+                    .font(.system(size: 18, weight: selection == tab ? .bold : .semibold))
+                    .symbolRenderingMode(.monochrome)
                 Text(title)
                     .font(.system(size: 10.5, weight: .bold, design: .rounded))
             }

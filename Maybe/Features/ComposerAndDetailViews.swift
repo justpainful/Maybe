@@ -23,8 +23,6 @@ struct AddMaybeSheet: View {
     @State private var errorMessage: String?
 
     private let mediaStore = LocalMediaStore()
-    private let typeColumns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 2)
-
     private var recentTags: [String] {
         var seen = Set<String>()
         return existingItems
@@ -38,47 +36,48 @@ struct AddMaybeSheet: View {
         NavigationStack {
             ZStack {
                 CreamCanvas()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        typePicker
-                        contentInput
-                        thoughtInput
-                        tagsInput
+                VStack(spacing: 0) {
+                    composerHeader
+
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 18) {
+                            typePicker
+                            contentInput
+                            thoughtInput
+                            tagsInput
+                        }
+                        .padding(.horizontal, MaybeMetrics.pageInset)
+                        .padding(.top, 8)
+                        .padding(.bottom, 18)
                     }
-                    .padding(.horizontal, MaybeMetrics.pageInset)
-                    .padding(.top, 14)
-                    .padding(.bottom, 18)
                 }
             }
-            .navigationTitle("Add to Maybe")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .accessibilityLabel("Close")
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 Button(action: save) {
-                    HStack {
+                    HStack(spacing: 9) {
                         if isSaving {
                             ProgressView().tint(MaybePalette.ink)
                         } else {
-                            Image(systemName: "arrow.down.to.line.compact")
+                            Image(systemName: "tray.and.arrow.down.fill")
                         }
                         Text(isSaving ? "Saving…" : "Save to Inbox")
                     }
+                    .font(.system(.headline, design: .rounded, weight: .bold))
                     .frame(maxWidth: .infinity)
+                    .frame(minHeight: 30)
                 }
-                .buttonStyle(KeycapButtonStyle(color: MaybePalette.yellow, cornerRadius: 20, depth: 3))
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.roundedRectangle(radius: 18))
+                .tint(MaybePalette.yellow)
+                .foregroundStyle(MaybePalette.ink)
+                .controlSize(.large)
                 .disabled(isSaving)
                 .accessibilityIdentifier("save-maybe-button")
                 .padding(.horizontal, MaybeMetrics.pageInset)
-                .padding(.top, 10)
+                .padding(.top, 8)
                 .padding(.bottom, 8)
-                .background(MaybePalette.cream.opacity(0.96))
+                .background(MaybePalette.cream.opacity(0.82))
             }
             .fileImporter(
                 isPresented: $isChoosingFile,
@@ -110,29 +109,50 @@ struct AddMaybeSheet: View {
         }
     }
 
-    private var typePicker: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("What are you keeping?")
-                .font(.maybeRounded(21, weight: .bold))
+    private var composerHeader: some View {
+        ZStack {
+            Text("Add to Maybe")
+                .font(.maybeRounded(20, weight: .bold))
 
-            LazyVGrid(columns: typeColumns, spacing: 10) {
-                ForEach(MaybeKind.allCases) { option in
-                    Button {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
-                            kind = option
+            HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .tint(Color.white.opacity(0.2))
+                .accessibilityLabel("Close")
+
+                Spacer()
+            }
+        }
+        .frame(height: 48)
+        .padding(.horizontal, MaybeMetrics.pageInset)
+        .padding(.top, 4)
+    }
+
+    private var typePicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("What are you keeping?")
+                .font(.maybeRounded(20, weight: .bold))
+
+            GlassEffectContainer(spacing: 8) {
+                HStack(spacing: 8) {
+                    ForEach(MaybeKind.allCases) { option in
+                        ComposerKindButton(
+                            title: option.title,
+                            symbol: composerSymbol(for: option),
+                            color: accent(for: option),
+                            isSelected: kind == option
+                        ) {
+                            withAnimation(.snappy(duration: 0.22)) {
+                                kind = option
+                            }
                         }
-                    } label: {
-                        Label(option.title, systemImage: option.symbol)
-                            .frame(maxWidth: .infinity)
+                        .accessibilityIdentifier("kind-\(option.rawValue)")
                     }
-                    .buttonStyle(
-                        KeycapButtonStyle(
-                            color: kind == option ? accent(for: option) : MaybePalette.glassWhite,
-                            cornerRadius: 17,
-                            depth: 3
-                        )
-                    )
-                    .accessibilityIdentifier("kind-\(option.rawValue)")
                 }
             }
         }
@@ -222,17 +242,29 @@ struct AddMaybeSheet: View {
             }
 
             if !recentTags.isEmpty {
-                TagGrid(tags: recentTags, accent: MaybePalette.green)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(recentTags, id: \.self) { tag in
+                            Button(tag) {
+                                appendTag(tag)
+                            }
+                            .font(.system(.caption, design: .rounded, weight: .bold))
+                            .buttonStyle(.glass)
+                            .buttonBorderShape(.capsule)
+                            .tint(MaybePalette.green.opacity(0.34))
+                        }
+                    }
+                }
             }
         }
     }
 
     private func inputCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10, content: content)
-            .padding(17)
+            .padding(15)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(0.46), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
-            .maybeGlass(cornerRadius: 21)
+            .background(Color.white.opacity(0.3), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+            .maybeGlass(cornerRadius: 19)
     }
 
     private func accent(for kind: MaybeKind) -> Color {
@@ -242,6 +274,21 @@ struct AddMaybeSheet: View {
         case .note: MaybePalette.yellow
         case .file: MaybePalette.purple
         }
+    }
+
+    private func composerSymbol(for kind: MaybeKind) -> String {
+        switch kind {
+        case .photo: "photo.fill"
+        case .link: "link"
+        case .note: "text.quote"
+        case .file: "doc.fill"
+        }
+    }
+
+    private func appendTag(_ tag: String) {
+        let existing = parsedTags.map { $0.lowercased() }
+        guard !existing.contains(tag.lowercased()) else { return }
+        tags = parsedTags.isEmpty ? tag : (parsedTags + [tag]).joined(separator: ", ")
     }
 
     private var duplicateAlertBinding: Binding<Bool> {
@@ -337,6 +384,54 @@ struct AddMaybeSheet: View {
     }
 }
 
+private struct ComposerKindButton: View {
+    let title: String
+    let symbol: String
+    let color: Color
+    let isSelected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: symbol)
+                    .font(.system(size: 19, weight: .semibold))
+                    .symbolRenderingMode(.monochrome)
+                    .frame(height: 22)
+
+                Text(title)
+                    .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(MaybePalette.ink)
+            .frame(maxWidth: .infinity)
+            .frame(height: 64)
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .glassEffect(
+                .regular
+                    .tint(isSelected ? color.opacity(0.6) : Color.white.opacity(0.12))
+                    .interactive(),
+                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(isSelected ? MaybePalette.ink.opacity(0.14) : Color.white.opacity(0.36), lineWidth: 0.75)
+            }
+        }
+        .buttonStyle(ComposerPressButtonStyle())
+        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+    }
+}
+
+private struct ComposerPressButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .offset(y: configuration.isPressed ? 2 : 0)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.spring(response: 0.18, dampingFraction: 0.74), value: configuration.isPressed)
+    }
+}
+
 private struct MaybePickerSurface: View {
     let symbol: String
     let title: String
@@ -344,26 +439,31 @@ private struct MaybePickerSurface: View {
     let color: Color
 
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 13) {
             Image(systemName: symbol)
-                .font(.system(size: 28, weight: .bold))
-                .frame(width: 58, height: 56)
-                .background(color.opacity(0.72), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
+                .font(.system(size: 21, weight: .semibold))
+                .symbolRenderingMode(.monochrome)
+                .frame(width: 46, height: 44)
+                .glassEffect(
+                    .regular.tint(color.opacity(0.52)),
+                    in: RoundedRectangle(cornerRadius: 15, style: .continuous)
+                )
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(.headline, design: .rounded, weight: .bold))
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.system(size: 13))
                     .foregroundStyle(MaybePalette.ink.opacity(0.54))
             }
             Spacer()
             Image(systemName: "chevron.right")
-                .font(.caption.bold())
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(MaybePalette.ink.opacity(0.48))
         }
         .foregroundStyle(MaybePalette.ink)
-        .padding(14)
-        .background(Color.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
-        .maybeGlass(cornerRadius: 23, tint: color.opacity(0.12), interactive: true)
+        .padding(13)
+        .background(Color.white.opacity(0.2), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
+        .maybeGlass(cornerRadius: 21, tint: color.opacity(0.1), interactive: true)
     }
 }
 
