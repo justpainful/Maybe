@@ -58,7 +58,7 @@ struct MaybeTests {
     func inboxReviewPersists() throws {
         let schema = Schema(versionedSchema: MaybeSchemaV1.self)
         let container = try ModelContainer(
-            for: MaybeSchemaV1.self,
+            for: schema,
             migrationPlan: MaybeMigrationPlan.self,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
         )
@@ -76,7 +76,7 @@ struct MaybeTests {
     func deletingIdeaPreservesItems() throws {
         let schema = Schema(versionedSchema: MaybeSchemaV1.self)
         let container = try ModelContainer(
-            for: MaybeSchemaV1.self,
+            for: schema,
             migrationPlan: MaybeMigrationPlan.self,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
         )

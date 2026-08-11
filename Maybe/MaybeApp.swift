@@ -12,14 +12,14 @@ struct MaybeApp: App {
 
         do {
             modelContainer = try ModelContainer(
-                for: MaybeSchemaV1.self,
+                for: schema,
                 migrationPlan: MaybeMigrationPlan.self,
                 configurations: [configuration]
             )
             startupIssue = nil
         } catch {
             modelContainer = try! ModelContainer(
-                for: MaybeSchemaV1.self,
+                for: schema,
                 migrationPlan: MaybeMigrationPlan.self,
                 configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
             )
