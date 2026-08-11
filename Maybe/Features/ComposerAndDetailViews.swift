@@ -284,6 +284,8 @@ struct AddMaybeSheet: View {
                         }
                     }
                 }
+                .scrollEdgeEffectHidden(true, for: .all)
+                .scrollClipDisabled()
             }
         }
     }
@@ -860,7 +862,7 @@ struct ItemDetailView: View {
         }
         .sheet(item: $ideaSeed) { seed in
             NewIdeaSheet(preselectedItem: seed)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.large])
         }
         .sheet(isPresented: $isEditing) {
             EditItemSheet(item: item, onDeleted: { dismiss() })

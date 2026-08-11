@@ -541,6 +541,8 @@ struct LibrarySearchView: View {
                     }
                     .padding(.vertical, 5)
                 }
+                .scrollEdgeEffectHidden(true, for: .all)
+                .scrollClipDisabled()
                 .buttonStyle(.plain)
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 8, leading: MaybeMetrics.pageInset, bottom: 8, trailing: MaybeMetrics.pageInset))
@@ -608,6 +610,7 @@ struct LibrarySearchView: View {
         .scrollContentBackground(.hidden)
         .background(CreamCanvas())
         .navigationTitle("Find anything")
+        .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your Maybes")
     }
 

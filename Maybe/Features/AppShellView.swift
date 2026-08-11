@@ -95,7 +95,7 @@ struct AppShellView: View {
                     .presentationDragIndicator(.visible)
             case .newIdea(let item):
                 NewIdeaSheet(preselectedItem: item)
-                    .presentationDetents([.medium, .large])
+                    .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             case .settings:
                 SettingsView()
