@@ -295,7 +295,7 @@ extension ExportPage {
     /// A filename that reads like the thing itself rather than an export id.
     static func filename(for title: String) -> String {
         let cleaned = title
-            .components(separatedBy: CharacterSet(charactersIn: "/\:?%*|\"<>"))
+            .components(separatedBy: CharacterSet(charactersIn: "/\\:?%*|\"<>"))
             .joined(separator: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return cleaned.isEmpty ? "Maybe" : String(cleaned.prefix(60))
