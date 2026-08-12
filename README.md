@@ -9,6 +9,13 @@ Maybe is a 100% local iOS 26+ library for the things that catch your attention a
 3. Connect saved things to an idea through **Inspired by**.
 4. Rediscover older saves with **Again** and **Maybe?**.
 
+An exported `.maybe` package holds `library.json`, the media, and an
+`index.html` you can open in any browser with no app and no network. That page
+inverts the app: months later the sentence you wrote matters more than the
+picture, so what you said leads and the photo supports it. The library travels
+inside the page as inlined JSON because browsers refuse to fetch sibling files
+from `file://` — only the photos are read from the folder beside it.
+
 There is no account, backend, analytics SDK, cloud database, or remote AI service. Structured metadata is stored with SwiftData. Imported media is written under Application Support and referenced by relative path. Export creates a single `.maybe` archive that can be imported manually.
 
 The `MaybeShare` extension accepts photos, links, text, and files from the system Share sheet. It queues them inside the local Maybe App Group, optionally associates an existing Idea, and imports them into Inbox the next time the app opens.

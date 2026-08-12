@@ -147,6 +147,56 @@ struct MaybeTests {
         #expect(second < third)
     }
 
+    @Test("An exported library carries a page any browser can open")
+    @MainActor
+    func exportedPackageCarriesAPage() throws {
+        let schema = Schema(versionedSchema: MaybeSchemaV1.self)
+        let container = try ModelContainer(
+            for: schema,
+            migrationPlan: MaybeMigrationPlan.self,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let item = SavedItem(
+            kind: .photo,
+            title: "Glass buttons",
+            note: "The way the light sits on the top edge",
+            tagNames: ["UI"]
+        )
+        let idea = Idea(title: "Maybe app UI", items: [item])
+        container.mainContext.insert(item)
+        container.mainContext.insert(idea)
+        try container.mainContext.save()
+
+        let package = try LibraryArchiveService.exportPackage(items: [item], ideas: [idea])
+        let data = try #require(package.fileWrappers?[ExportPage.filename]?.regularFileContents)
+        let html = try #require(String(data: data, encoding: .utf8))
+
+        #expect(html.contains("The way the light sits on the top edge"))
+        #expect(html.contains("Maybe app UI"))
+        // Browsers refuse to fetch sibling files from file://, so the library
+        // has to travel inside the page, and nothing may come off the network.
+        #expect(!html.contains("/*__MAYBE_LIBRARY__*/"))
+        #expect(!html.contains("<script src"))
+        #expect(!html.contains("<link rel=\"stylesheet\""))
+    }
+
+    @Test("The page escapes anything that could close its own script tag")
+    func exportPageEscapesClosingTags() throws {
+        let item = SavedItem(kind: .note, title: "</script> and more", note: "Still fine")
+        let data = try #require(
+            ExportPage.render(
+                items: [item],
+                ideas: [],
+                locations: [:],
+                template: "<html><script>/*__MAYBE_LIBRARY__*/</script></html>"
+            )
+        )
+        let html = try #require(String(data: data, encoding: .utf8))
+
+        #expect(html.contains("<\\/script>"))
+        #expect(html.components(separatedBy: "</script>").count == 2)
+    }
+
     @Test("Library backup is a package with JSON and media folders")
     @MainActor
     func libraryPackageRoundTrip() throws {

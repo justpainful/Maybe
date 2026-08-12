@@ -1,0 +1,889 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>maybe — library</title>
+<style>
+:root {
+  --cream: #F3F0E7;
+  --paper: #FAF8F3;
+  --ink: #171717;
+  --purple: #7957FF;
+  --yellow: #FFD83D;
+  --blue: #70AEFF;
+  --green: #87E56D;
+  --coral: #FF8066;
+  --hair: rgba(23, 23, 23, 0.12);
+  --soft: rgba(23, 23, 23, 0.55);
+  --faint: rgba(23, 23, 23, 0.34);
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, monospace;
+  --round: ui-rounded, "SF Pro Rounded", "Segoe UI Variable Display", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--round);
+  font-synthesis-weight: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; }
+
+/* ---------- the spine ---------------------------------------------------- */
+
+.page {
+  max-width: 1680px;
+  margin: 0 auto;
+  padding: 0 clamp(20px, 4vw, 72px) 160px;
+}
+
+.spine {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: clamp(20px, 4vw, 72px);
+  width: 1px;
+  background: var(--hair);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---------- masthead ----------------------------------------------------- */
+
+.masthead {
+  position: relative;
+  z-index: 1;
+  padding: clamp(48px, 9vh, 120px) 0 clamp(32px, 5vh, 64px) clamp(22px, 3vw, 52px);
+}
+
+.wordmark {
+  display: flex;
+  align-items: center;
+  gap: clamp(14px, 1.6vw, 26px);
+}
+
+.wordmark svg { display: block; }
+
+.wordmark h1 {
+  margin: 0;
+  font-size: clamp(52px, 9vw, 132px);
+  font-weight: 900;
+  letter-spacing: -0.055em;
+  line-height: 0.82;
+}
+
+.wordmark h1 .y { display: inline-block; transform: translateY(0.055em); }
+
+.standfirst {
+  margin: clamp(26px, 3.5vh, 40px) 0 0;
+  max-width: 34ch;
+  font-size: clamp(19px, 1.6vw, 26px);
+  font-weight: 650;
+  line-height: 1.32;
+  letter-spacing: -0.015em;
+}
+
+.ledger {
+  margin-top: clamp(22px, 3vh, 36px);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 26px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+
+.ledger b { color: var(--ink); font-weight: 700; }
+
+/* ---------- toolbar ------------------------------------------------------ */
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-left: clamp(22px, 3vw, 52px);
+  padding: 14px 0;
+  background: color-mix(in srgb, var(--cream) 86%, transparent);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--hair);
+}
+
+.search {
+  flex: 1 1 240px;
+  min-width: 200px;
+  max-width: 420px;
+  height: 42px;
+  padding: 0 16px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  outline: none;
+}
+
+.search:focus { border-color: var(--ink); }
+.search::placeholder { color: var(--faint); }
+
+.chip {
+  height: 42px;
+  padding: 0 15px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+.chip:hover { transform: translateY(-1px); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--cream); border-color: var(--ink); }
+
+.tally {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+
+/* ---------- section rules ------------------------------------------------ */
+
+.rule {
+  position: relative;
+  z-index: 1;
+  margin: clamp(52px, 7vh, 96px) 0 clamp(24px, 3vh, 40px) clamp(22px, 3vw, 52px);
+  display: flex;
+  align-items: baseline;
+  gap: 18px;
+}
+
+main > .rule:first-child { margin-top: clamp(34px, 4vh, 56px); }
+
+.rule h2 {
+  margin: 0;
+  font-size: clamp(13px, 1vw, 15px);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.rule span {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--soft);
+}
+
+.rule::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--hair);
+}
+
+/* ---------- ideas -------------------------------------------------------- */
+
+.idea {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(200px, 290px) 1fr;
+  gap: clamp(24px, 3vw, 56px);
+  margin: 0 0 clamp(48px, 6vh, 84px) clamp(22px, 3vw, 52px);
+}
+
+.idea-head { position: sticky; top: 86px; align-self: start; }
+
+.idea-head h3 {
+  margin: 0;
+  font-size: clamp(30px, 3.2vw, 50px);
+  font-weight: 900;
+  line-height: 0.94;
+  letter-spacing: -0.04em;
+}
+
+.idea-head p {
+  margin: 14px 0 0;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--soft);
+  max-width: 32ch;
+}
+
+.idea-count {
+  display: inline-block;
+  margin-top: 18px;
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid var(--hair);
+}
+
+.idea-pieces {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: clamp(16px, 1.6vw, 28px);
+  align-items: start;
+}
+
+/* ---------- the wall ----------------------------------------------------- */
+
+.month {
+  position: relative;
+  z-index: 1;
+  margin: clamp(48px, 7vh, 92px) 0 clamp(18px, 2.5vh, 30px) 0;
+  padding-left: clamp(22px, 3vw, 52px);
+  font-size: clamp(28px, 3vw, 46px);
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  line-height: 1;
+}
+
+.month::before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.wall {
+  position: relative;
+  z-index: 1;
+  margin-left: clamp(22px, 3vw, 52px);
+  columns: 300px;
+  column-gap: clamp(16px, 1.6vw, 28px);
+}
+
+@media (max-width: 880px) {
+  .wall { columns: 240px; }
+  .idea { grid-template-columns: 1fr; }
+  .idea-head { position: static; }
+}
+
+.wall .piece { break-inside: avoid; margin-bottom: clamp(16px, 1.6vw, 28px); }
+
+/* ---------- a saved thing ------------------------------------------------ */
+
+.piece {
+  position: relative;
+  display: block;
+  width: 100%;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: zoom-in;
+  transition: transform 0.16s cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+.piece:hover { transform: translateY(-3px); }
+.piece:focus-visible { outline: 2px solid var(--ink); outline-offset: 6px; border-radius: 18px; }
+
+/* Something you wrote about earns paper under it. */
+.piece.told {
+  background: var(--paper);
+  border: 1px solid var(--hair);
+  border-radius: 18px;
+  padding: 10px 10px 16px;
+  cursor: pointer;
+}
+
+.frame {
+  position: relative;
+  display: block;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(23, 23, 23, 0.05);
+  border: 1px solid var(--hair);
+}
+
+.frame img { display: block; width: 100%; height: auto; }
+
+.told .frame { cursor: zoom-in; }
+
+.index {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 3px 7px;
+  border-radius: 7px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  background: rgba(250, 248, 243, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.stack {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  background: rgba(250, 248, 243, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.heart {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  padding: 4px;
+  border-radius: 50%;
+  background: rgba(250, 248, 243, 0.82);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.heart svg { display: block; width: 100%; height: 100%; }
+
+/* Kinds without a photo speak for themselves. */
+.slab {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 10px;
+  min-height: 132px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--hair);
+}
+
+.slab .mark { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--soft); }
+.slab .body { font-size: 21px; font-weight: 750; line-height: 1.24; letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.slab .ext { font-size: 32px; font-weight: 900; letter-spacing: -0.03em; }
+
+.said {
+  margin: 14px 4px 0;
+  font-size: clamp(17px, 1.35vw, 21px);
+  font-weight: 700;
+  line-height: 1.28;
+  letter-spacing: -0.022em;
+}
+
+.piece:not(.told) .said { display: none; }
+
+.meta {
+  margin: 10px 4px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.meta .tag { color: var(--soft); }
+
+/* ---------- lightbox ----------------------------------------------------- */
+
+.viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: none;
+  grid-template-rows: 1fr auto;
+  background: rgba(17, 17, 17, 0.96);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.viewer[open] { display: grid; }
+
+.viewer-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(16px, 4vh, 56px);
+  min-height: 0;
+}
+
+.viewer-stage img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.viewer-note {
+  padding: 0 clamp(20px, 5vw, 64px) clamp(24px, 5vh, 52px);
+  color: var(--cream);
+  max-width: 78ch;
+}
+
+.viewer-note .said { margin: 0; font-size: clamp(18px, 2vw, 27px); display: block; }
+.viewer-note .meta { color: rgba(243, 240, 231, 0.5); margin-left: 0; margin-right: 0; }
+.viewer-note .meta .tag { color: rgba(243, 240, 231, 0.75); }
+.viewer-note a { color: var(--yellow); }
+
+.viewer button {
+  position: absolute;
+  top: 50%;
+  width: 46px;
+  height: 46px;
+  margin-top: -23px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(243, 240, 231, 0.14);
+  color: var(--cream);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.viewer button:hover { background: rgba(243, 240, 231, 0.26); }
+.viewer .prev { left: clamp(10px, 2vw, 24px); }
+.viewer .next { right: clamp(10px, 2vw, 24px); }
+
+.viewer .close {
+  top: clamp(14px, 3vh, 26px);
+  right: clamp(14px, 2vw, 26px);
+  margin-top: 0;
+}
+
+.empty {
+  margin-left: clamp(22px, 3vw, 52px);
+  padding: 80px 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--faint);
+}
+
+.colophon {
+  margin: clamp(80px, 12vh, 150px) 0 0 clamp(22px, 3vw, 52px);
+  padding-top: 26px;
+  border-top: 1px solid var(--hair);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.9;
+  letter-spacing: 0.06em;
+  color: var(--soft);
+  max-width: 60ch;
+}
+
+@media print {
+  .toolbar, .viewer { display: none !important; }
+  .piece:hover { transform: none; }
+}
+</style>
+</head>
+<body>
+<div class="spine"></div>
+
+<div class="page">
+  <header class="masthead">
+    <div class="wordmark">
+      <svg width="88" height="88" viewBox="0 0 100 100" aria-hidden="true">
+        <rect x="6" y="6" width="88" height="88" rx="26" fill="#fff" fill-opacity="0.85" stroke="rgba(23,23,23,0.16)"/>
+        <g fill="none" stroke="#171717" stroke-width="7.4" stroke-linecap="round">
+          <path d="M32.8 35.8V62.2"/>
+          <path d="M32.8 44.4a8.6 8.6 0 0 1 17.2 0V62.2"/>
+          <path d="M50 44.4a8.6 8.6 0 0 1 17.2 0V62.2"/>
+        </g>
+      </svg>
+      <h1>ma<span class="y">y</span>be</h1>
+    </div>
+    <p class="standfirst" id="standfirst">Everything that caught you, and what you said about it.</p>
+    <div class="ledger" id="ledger"></div>
+  </header>
+
+  <div class="toolbar">
+    <input class="search" id="search" type="search" placeholder="Search what you kept" autocomplete="off">
+    <div id="chips"></div>
+    <div class="tally" id="tally"></div>
+  </div>
+
+  <main id="main"></main>
+
+  <footer class="colophon" id="colophon"></footer>
+</div>
+
+<div class="viewer" id="viewer" role="dialog" aria-modal="true" aria-label="Photo">
+  <div class="viewer-stage">
+    <img id="viewer-img" alt="">
+    <button class="close" id="viewer-close" aria-label="Close">✕</button>
+    <button class="prev" id="viewer-prev" aria-label="Previous">‹</button>
+    <button class="next" id="viewer-next" aria-label="Next">›</button>
+  </div>
+  <div class="viewer-note">
+    <p class="said" id="viewer-said"></p>
+    <div class="meta" id="viewer-meta"></div>
+  </div>
+</div>
+
+<script id="maybe-library" type="application/json">/*__MAYBE_LIBRARY__*/</script>
+<script>
+(function () {
+  "use strict";
+
+  var LIBRARY = JSON.parse(document.getElementById("maybe-library").textContent);
+  var items = LIBRARY.items || [];
+  var ideas = LIBRARY.ideas || [];
+  var byID = {};
+  items.forEach(function (item, index) {
+    item.number = String(index + 1).padStart(3, "0");
+    byID[item.id] = item;
+  });
+
+  var KINDS = [
+    { key: "all", label: "Everything" },
+    { key: "told", label: "With a thought" },
+    { key: "photo", label: "Photos" },
+    { key: "link", label: "Links" },
+    { key: "note", label: "Notes" },
+    { key: "file", label: "Files" },
+    { key: "favourite", label: "Favourites" }
+  ];
+
+  var state = { filter: "all", query: "" };
+
+  var el = function (tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+  };
+
+  /* ---------- header ---------- */
+
+  var ledger = document.getElementById("ledger");
+  [
+    [LIBRARY.counts.things, "things"],
+    [LIBRARY.counts.photos, "photos"],
+    [LIBRARY.counts.ideas, "ideas"],
+    [LIBRARY.counts.told, "written about"]
+  ].forEach(function (pair) {
+    var span = el("span");
+    span.appendChild(el("b", null, String(pair[0])));
+    span.appendChild(document.createTextNode(" " + pair[1]));
+    ledger.appendChild(span);
+  });
+  var stamp = el("span", null, "exported " + LIBRARY.exportedAt);
+  ledger.appendChild(stamp);
+
+  document.getElementById("colophon").textContent =
+    "This page and every photo in it came out of Maybe on your device. Nothing here loads from the internet — " +
+    "open it anywhere, keep it anywhere, it will still work with no app and no account. " +
+    "The library.json beside it is the same library in plain text.";
+
+  /* ---------- chips ---------- */
+
+  var chipRow = document.getElementById("chips");
+  chipRow.style.display = "flex";
+  chipRow.style.flexWrap = "wrap";
+  chipRow.style.gap = "8px";
+
+  KINDS.forEach(function (kind) {
+    var available = kind.key === "all" || items.some(function (item) { return matchesKind(item, kind.key); });
+    if (!available) return;
+    var button = el("button", "chip", kind.label);
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(state.filter === kind.key));
+    button.addEventListener("click", function () {
+      state.filter = kind.key;
+      Array.prototype.forEach.call(chipRow.children, function (other) {
+        other.setAttribute("aria-pressed", String(other === button));
+      });
+      render();
+    });
+    chipRow.appendChild(button);
+  });
+
+  function matchesKind(item, key) {
+    if (key === "all") return true;
+    if (key === "told") return !!item.note;
+    if (key === "favourite") return !!item.favourite;
+    return item.kind === key;
+  }
+
+  function matchesQuery(item) {
+    if (!state.query) return true;
+    return (item.haystack || "").indexOf(state.query) !== -1;
+  }
+
+  function visible(item) {
+    return matchesKind(item, state.filter) && matchesQuery(item);
+  }
+
+  document.getElementById("search").addEventListener("input", function (event) {
+    state.query = event.target.value.trim().toLowerCase();
+    render();
+  });
+
+  /* ---------- pieces ---------- */
+
+  function pieceNode(item) {
+    var node = el("button", "piece" + (item.note ? " told" : ""));
+    node.type = "button";
+    node.setAttribute("aria-label", item.title);
+
+    if (item.photos && item.photos.length) {
+      var frame = el("span", "frame");
+      var img = document.createElement("img");
+      img.src = item.photos[0].thumb || item.photos[0].src;
+      img.alt = item.title;
+      img.loading = "lazy";
+      if (item.photos[0].w && item.photos[0].h) {
+        img.width = item.photos[0].w;
+        img.height = item.photos[0].h;
+      }
+      frame.appendChild(img);
+      frame.appendChild(el("span", "index", item.number));
+      if (item.photos.length > 1) {
+        frame.appendChild(el("span", "stack", item.photos.length + " photos"));
+      }
+      if (item.favourite) frame.appendChild(heartNode());
+      node.appendChild(frame);
+      node.addEventListener("click", function () { openViewer(item, 0); });
+    } else {
+      node.appendChild(slabNode(item));
+      if (item.url) {
+        node.addEventListener("click", function () { window.open(item.url, "_blank", "noopener"); });
+      } else {
+        node.style.cursor = "default";
+      }
+    }
+
+    if (item.note) {
+      node.appendChild(el("p", "said", item.note));
+    }
+    node.appendChild(metaNode(item, false));
+    return node;
+  }
+
+  function slabNode(item) {
+    var slab = el("span", "slab");
+    slab.style.background = tint(item.accent);
+    slab.appendChild(el("span", "mark", item.number + " · " + item.kind));
+    if (item.kind === "file") {
+      slab.appendChild(el("span", "ext", item.fileExtension || "FILE"));
+      slab.appendChild(el("span", "body", item.file || item.title));
+    } else if (item.kind === "link") {
+      slab.appendChild(el("span", "body", item.source || item.title));
+    } else {
+      slab.appendChild(el("span", "body", item.title));
+    }
+    return slab;
+  }
+
+  function metaNode(item, forViewer) {
+    var meta = el("div", "meta");
+    meta.appendChild(el("span", null, item.dateLabel));
+    if (item.source) {
+      if (forViewer && item.url) {
+        var link = el("a", null, item.source);
+        link.href = item.url;
+        link.target = "_blank";
+        link.rel = "noopener";
+        meta.appendChild(link);
+      } else {
+        meta.appendChild(el("span", null, item.source));
+      }
+    }
+    (item.tags || []).forEach(function (tag) {
+      meta.appendChild(el("span", "tag", tag));
+    });
+    (item.ideas || []).forEach(function (title) {
+      meta.appendChild(el("span", "tag", "→ " + title));
+    });
+    return meta;
+  }
+
+  function heartNode() {
+    var span = el("span", "heart");
+    span.innerHTML = '<svg viewBox="0 0 24 24" fill="#FF8066" stroke="rgba(23,23,23,0.35)" stroke-width="1.2">' +
+      '<path d="M12 20.4S3.6 15 3.6 9.3A4.7 4.7 0 0 1 12 6.6a4.7 4.7 0 0 1 8.4 2.7c0 5.7-8.4 11.1-8.4 11.1z"/></svg>';
+    return span;
+  }
+
+  function tint(hex) {
+    var value = (hex || "7957FF").replace("#", "");
+    var r = parseInt(value.slice(0, 2), 16);
+    var g = parseInt(value.slice(2, 4), 16);
+    var b = parseInt(value.slice(4, 6), 16);
+    return "rgba(" + r + "," + g + "," + b + ",0.3)";
+  }
+
+  /* ---------- render ---------- */
+
+  var main = document.getElementById("main");
+
+  function render() {
+    main.textContent = "";
+    var shown = items.filter(visible);
+
+    document.getElementById("tally").textContent =
+      shown.length === items.length
+        ? items.length + " kept"
+        : shown.length + " of " + items.length;
+
+    var shownIDs = {};
+    shown.forEach(function (item) { shownIDs[item.id] = true; });
+
+    var liveIdeas = ideas.map(function (idea) {
+      return {
+        idea: idea,
+        pieces: (idea.itemIDs || []).map(function (id) { return byID[id]; })
+          .filter(function (item) { return item && shownIDs[item.id]; })
+      };
+    }).filter(function (entry) { return entry.pieces.length > 0; });
+
+    if (liveIdeas.length) {
+      main.appendChild(ruleNode("Ideas", liveIdeas.length + " in progress"));
+      liveIdeas.forEach(function (entry) {
+        main.appendChild(ideaNode(entry.idea, entry.pieces));
+      });
+    }
+
+    var loose = shown.filter(function (item) { return !item.ideas || !item.ideas.length; });
+    var wallItems = liveIdeas.length ? loose : shown;
+
+    if (wallItems.length) {
+      main.appendChild(ruleNode(liveIdeas.length ? "Everything else" : "Everything", wallItems.length + " things"));
+      var month = null;
+      var wall = null;
+      wallItems.forEach(function (item) {
+        if (item.month !== month) {
+          month = item.month;
+          main.appendChild(el("h2", "month", month));
+          wall = el("div", "wall");
+          main.appendChild(wall);
+        }
+        wall.appendChild(pieceNode(item));
+      });
+    }
+
+    if (!shown.length) {
+      main.appendChild(el("p", "empty", state.query
+        ? "Nothing here matches “" + state.query + "”."
+        : "Nothing to show with that filter."));
+    }
+  }
+
+  function ruleNode(title, note) {
+    var rule = el("div", "rule");
+    rule.appendChild(el("h2", null, title));
+    rule.appendChild(el("span", null, note));
+    return rule;
+  }
+
+  function ideaNode(idea, pieces) {
+    var wrap = el("section", "idea");
+    var head = el("div", "idea-head");
+    head.appendChild(el("h3", null, idea.title));
+    if (idea.note) head.appendChild(el("p", null, idea.note));
+    head.appendChild(el("span", "idea-count", "inspired by " + pieces.length));
+    wrap.appendChild(head);
+
+    var grid = el("div", "idea-pieces");
+    pieces.forEach(function (item) { grid.appendChild(pieceNode(item)); });
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  /* ---------- viewer ---------- */
+
+  var viewer = document.getElementById("viewer");
+  var viewerImg = document.getElementById("viewer-img");
+  var viewerSaid = document.getElementById("viewer-said");
+  var viewerMeta = document.getElementById("viewer-meta");
+  var current = { item: null, index: 0 };
+
+  function openViewer(item, index) {
+    current.item = item;
+    current.index = index;
+    paintViewer();
+    viewer.setAttribute("open", "");
+    document.body.style.overflow = "hidden";
+  }
+
+  function paintViewer() {
+    var photo = current.item.photos[current.index];
+    viewerImg.src = photo.src;
+    viewerImg.alt = current.item.title;
+    viewerSaid.textContent = current.item.note || current.item.title;
+    viewerMeta.textContent = "";
+    var fresh = metaNode(current.item, true);
+    while (fresh.firstChild) viewerMeta.appendChild(fresh.firstChild);
+    if (current.item.photos.length > 1) {
+      viewerMeta.appendChild(el("span", null, (current.index + 1) + " / " + current.item.photos.length));
+    }
+    var many = current.item.photos.length > 1;
+    document.getElementById("viewer-prev").style.display = many ? "" : "none";
+    document.getElementById("viewer-next").style.display = many ? "" : "none";
+  }
+
+  function step(delta) {
+    if (!current.item) return;
+    var count = current.item.photos.length;
+    current.index = (current.index + delta + count) % count;
+    paintViewer();
+  }
+
+  function closeViewer() {
+    viewer.removeAttribute("open");
+    viewerImg.removeAttribute("src");
+    document.body.style.overflow = "";
+    current.item = null;
+  }
+
+  document.getElementById("viewer-close").addEventListener("click", closeViewer);
+  document.getElementById("viewer-prev").addEventListener("click", function (e) { e.stopPropagation(); step(-1); });
+  document.getElementById("viewer-next").addEventListener("click", function (e) { e.stopPropagation(); step(1); });
+  viewer.addEventListener("click", function (event) {
+    if (event.target === viewer || event.target.classList.contains("viewer-stage")) closeViewer();
+  });
+  document.addEventListener("keydown", function (event) {
+    if (!current.item) return;
+    if (event.key === "Escape") closeViewer();
+    if (event.key === "ArrowLeft") step(-1);
+    if (event.key === "ArrowRight") step(1);
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

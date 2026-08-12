@@ -24,6 +24,8 @@
 		B00000000000000000000014 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000014 /* ShareViewController.swift */; };
 		B00000000000000000000015 /* SharedCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000012 /* SharedCapture.swift */; };
 		B00000000000000000000016 /* MaybeDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000004 /* MaybeDesignSystem.swift */; };
+		B00000000000000000000018 /* ExportPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000018 /* ExportPage.swift */; };
+		B00000000000000000000019 /* MaybeExport.html in Resources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000019 /* MaybeExport.html */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +69,8 @@
 		A00000000000000000000007 /* LibraryViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryViews.swift; sourceTree = "<group>"; };
 		A00000000000000000000008 /* ComposerAndDetailViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComposerAndDetailViews.swift; sourceTree = "<group>"; };
 		A00000000000000000000017 /* LibraryEditors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryEditors.swift; sourceTree = "<group>"; };
+		A00000000000000000000018 /* ExportPage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportPage.swift; sourceTree = "<group>"; };
+		A00000000000000000000019 /* MaybeExport.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = MaybeExport.html; sourceTree = "<group>"; };
 		A00000000000000000000009 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		A00000000000000000000010 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A00000000000000000000011 /* MaybeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaybeTests.swift; sourceTree = "<group>"; };
@@ -123,6 +127,7 @@
 				100000000000000000000004 /* Services */,
 				100000000000000000000005 /* DesignSystem */,
 				100000000000000000000006 /* Features */,
+				100000000000000000000010 /* Resources */,
 				A00000000000000000000010 /* Assets.xcassets */,
 				A00000000000000000000013 /* Maybe.entitlements */,
 			);
@@ -141,6 +146,7 @@
 			isa = PBXGroup;
 			children = (
 				A00000000000000000000003 /* LibraryServices.swift */,
+				A00000000000000000000018 /* ExportPage.swift */,
 				A00000000000000000000012 /* SharedCapture.swift */,
 			);
 			path = Services;
@@ -165,6 +171,14 @@
 				A00000000000000000000009 /* SettingsView.swift */,
 			);
 			path = Features;
+			sourceTree = "<group>";
+		};
+		100000000000000000000010 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				A00000000000000000000019 /* MaybeExport.html */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		100000000000000000000007 /* MaybeTests */ = {
@@ -307,6 +321,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B00000000000000000000010 /* Assets.xcassets in Resources */,
+				B00000000000000000000019 /* MaybeExport.html in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -341,6 +356,7 @@
 				B00000000000000000000008 /* ComposerAndDetailViews.swift in Sources */,
 				B00000000000000000000017 /* LibraryEditors.swift in Sources */,
 				B00000000000000000000009 /* SettingsView.swift in Sources */,
+				B00000000000000000000018 /* ExportPage.swift in Sources */,
 				B00000000000000000000012 /* SharedCapture.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

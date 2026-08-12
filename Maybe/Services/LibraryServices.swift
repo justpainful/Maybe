@@ -657,6 +657,7 @@ enum LibraryArchiveService {
     ) throws -> FileWrapper {
         var mediaFiles: [String: FileWrapper] = [:]
         var thumbnailFiles: [String: FileWrapper] = [:]
+        var locations: [UUID: ExportPage.MediaLocation] = [:]
         let itemRecords = items.map { item in
             ItemRecord(
                 id: item.id,
@@ -686,6 +687,11 @@ enum LibraryArchiveService {
                         thumbnailFiles[name] = FileWrapper(regularFileWithContents: data)
                         return name
                     }
+                    let storedPath = mediaFiles[archivePath] == nil ? nil : archivePath
+                    locations[attachment.id] = ExportPage.MediaLocation(
+                        archivePath: storedPath,
+                        thumbnailArchivePath: thumbnailArchivePath
+                    )
                     return MediaRecord(
                         id: attachment.id,
                         type: attachment.typeRawValue,
@@ -693,7 +699,7 @@ enum LibraryArchiveService {
                         sha256: attachment.sha256,
                         width: attachment.width,
                         height: attachment.height,
-                        archivePath: mediaFiles[archivePath] == nil ? nil : archivePath,
+                        archivePath: storedPath,
                         thumbnailArchivePath: thumbnailArchivePath,
                         data: nil
                     )
@@ -719,11 +725,18 @@ enum LibraryArchiveService {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let libraryData = try encoder.encode(archive)
-        return FileWrapper(directoryWithFileWrappers: [
+        var children: [String: FileWrapper] = [
             "library.json": FileWrapper(regularFileWithContents: libraryData),
             "media": FileWrapper(directoryWithFileWrappers: mediaFiles),
             "thumbnails": FileWrapper(directoryWithFileWrappers: thumbnailFiles),
-        ])
+        ]
+
+        // A library you can read without the app: open this in any browser.
+        if let page = ExportPage.render(items: items, ideas: ideas, locations: locations) {
+            children[ExportPage.filename] = FileWrapper(regularFileWithContents: page)
+        }
+
+        return FileWrapper(directoryWithFileWrappers: children)
     }
 
     @MainActor

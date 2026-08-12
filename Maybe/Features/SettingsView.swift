@@ -105,7 +105,7 @@ struct SettingsView: View {
             }
             .buttonStyle(KeycapButtonStyle(color: Color.white.opacity(0.7), cornerRadius: 18))
 
-            Text("One file with every photo, note and idea. Move it between your own devices by hand.")
+            Text("One file with every photo, note and idea. Open **index.html** inside it to read your whole library in any browser — no app, no account, no internet.")
                 .font(.system(size: 13))
                 .foregroundStyle(MaybePalette.inkSoft)
         }
