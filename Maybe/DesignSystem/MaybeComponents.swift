@@ -174,6 +174,7 @@ struct TagEditor: View {
                             TagChip(name: tag, color: MaybePalette.green, selected: true, onRemove: { remove(tag) })
                         }
                         .buttonStyle(PressableStyle(scale: 0.94))
+                        .transition(.scale(scale: 0.8).combined(with: .opacity))
                         .accessibilityLabel("Remove tag \(tag)")
                     }
                 }
@@ -220,11 +221,15 @@ struct TagEditor: View {
         draft = ""
         guard !tag.isEmpty,
               !tags.contains(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) else { return }
-        tags.append(tag)
+        withAnimation(.snappy(duration: 0.2)) {
+            tags.append(tag)
+        }
     }
 
     private func remove(_ tag: String) {
-        tags.removeAll { $0 == tag }
+        withAnimation(.snappy(duration: 0.2)) {
+            tags.removeAll { $0 == tag }
+        }
     }
 }
 

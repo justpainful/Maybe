@@ -267,6 +267,7 @@ private struct ShareCaptureView: View {
                     Button {
                         do {
                             try model.save()
+                            MaybeHaptics.saved()
                             onSaved()
                         } catch {
                             model.errorMessage = error.localizedDescription

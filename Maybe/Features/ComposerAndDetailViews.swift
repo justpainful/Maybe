@@ -13,6 +13,12 @@ struct PhotoDraft: Identifiable {
     let aspect: CGFloat
 }
 
+enum ComposerField: Hashable {
+    case note
+    case link
+    case thought
+}
+
 struct AddMaybeSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
@@ -34,6 +40,7 @@ struct AddMaybeSheet: View {
     @State private var duplicateItem: SavedItem?
     @State private var duplicatePreview: SavedItem?
     @State private var errorMessage: String?
+    @FocusState private var focusedField: ComposerField?
 
     private var recentTags: [String] {
         var seen = Set<String>()
@@ -63,9 +70,11 @@ struct AddMaybeSheet: View {
                         .padding(.top, 4)
                         .padding(.bottom, 24)
                     }
+                    .scrollDismissesKeyboard(.interactively)
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
+            .sensoryFeedback(.selection, trigger: kind)
             .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
             .photosPicker(
                 isPresented: $isChoosingPhotos,
@@ -163,6 +172,12 @@ struct AddMaybeSheet: View {
             ForEach(MaybeKind.allCases) { option in
                 Button {
                     kind = option
+                    // Choosing Note or Link is choosing to type: skip the extra tap.
+                    switch option {
+                    case .note: focusedField = .note
+                    case .link: focusedField = .link
+                    case .photo, .file: focusedField = nil
+                    }
                 } label: {
                     VStack(spacing: 5) {
                         Image(systemName: option.symbol)
@@ -204,6 +219,7 @@ struct AddMaybeSheet: View {
                     .keyboardType(.URL)
                     .autocorrectionDisabled()
                     .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .focused($focusedField, equals: .link)
                     .padding(16)
                     .maybePanel(cornerRadius: 18)
                 nameField
@@ -214,6 +230,7 @@ struct AddMaybeSheet: View {
                 TextField("Something worth keeping…", text: $name, axis: .vertical)
                     .lineLimit(4...10)
                     .font(.system(size: 19, weight: .semibold, design: .rounded))
+                    .focused($focusedField, equals: .note)
                     .padding(16)
                     .maybePanel(cornerRadius: 18)
             }
@@ -254,7 +271,9 @@ struct AddMaybeSheet: View {
                 Spacer(minLength: 0)
                 if !photoDrafts.isEmpty {
                     Button("Clear") {
-                        photoDrafts = []
+                        withAnimation(.snappy(duration: 0.25)) {
+                            photoDrafts = []
+                        }
                         photoSelections = []
                     }
                     .font(.maybeMeta)
@@ -338,13 +357,17 @@ struct AddMaybeSheet: View {
             .aspectRatio(contentMode: .fill)
             .frame(width: 84, height: 106)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .transition(.scale(scale: 0.85).combined(with: .opacity))
             .overlay {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .strokeBorder(MaybePalette.hairline, lineWidth: 1)
             }
             .overlay(alignment: .topTrailing) {
                 Button {
-                    photoDrafts.removeAll { $0.id == draft.id }
+                    withAnimation(.snappy(duration: 0.25)) {
+                        photoDrafts.removeAll { $0.id == draft.id }
+                    }
+                    MaybeHaptics.removed()
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 10, weight: .black))
@@ -374,6 +397,7 @@ struct AddMaybeSheet: View {
             TextField("The way the light sits on the edge…", text: $thought, axis: .vertical)
                 .lineLimit(2...6)
                 .font(.system(size: 16))
+                .focused($focusedField, equals: .thought)
                 .padding(16)
                 .maybePanel(cornerRadius: 18)
                 .accessibilityIdentifier("thought-field")
@@ -405,7 +429,9 @@ struct AddMaybeSheet: View {
                       let draft = makeDraft(from: data) else { continue }
                 loaded.append(draft)
             }
-            photoDrafts.append(contentsOf: loaded)
+            withAnimation(.snappy(duration: 0.28)) {
+                photoDrafts.append(contentsOf: loaded)
+            }
             photoSelections = []
             isLoadingPhotos = false
         }
@@ -500,6 +526,7 @@ struct AddMaybeSheet: View {
                 let hash = LocalMediaStore.hash(payload)
                 if let duplicate = attachments.first(where: { $0.sha256 == hash }), let owner = duplicate.item {
                     duplicateItem = owner
+                    MaybeHaptics.blocked()
                     return
                 }
             }
@@ -509,6 +536,7 @@ struct AddMaybeSheet: View {
                 let normalized = normalizedLink(trimmedSource)
                 if let existing = existingItems.first(where: { normalizedLink($0.sourceURLString ?? "") == normalized }) {
                     duplicateItem = existing
+                    MaybeHaptics.blocked()
                     return
                 }
             }
@@ -545,6 +573,7 @@ struct AddMaybeSheet: View {
             }
 
             try modelContext.save()
+            MaybeHaptics.saved()
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
@@ -644,6 +673,7 @@ struct NewIdeaSheet: View {
                     .padding(.top, 8)
                     .padding(.bottom, 24)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 Button(action: save) {
@@ -710,10 +740,12 @@ struct NewIdeaSheet: View {
     }
 
     private func toggle(_ item: SavedItem) {
-        if selectedIDs.contains(item.id) {
-            selectedIDs.remove(item.id)
-        } else {
-            selectedIDs.insert(item.id)
+        withAnimation(.snappy(duration: 0.2)) {
+            if selectedIDs.contains(item.id) {
+                selectedIDs.remove(item.id)
+            } else {
+                selectedIDs.insert(item.id)
+            }
         }
     }
 
@@ -737,6 +769,7 @@ struct NewIdeaSheet: View {
             try modelContext.save()
             let titles = (try modelContext.fetch(FetchDescriptor<Idea>())).map(\.title)
             MaybeSharedContainer.publishIdeaTitles(titles)
+            MaybeHaptics.saved()
             dismiss()
         } catch {
             modelContext.delete(idea)
@@ -967,6 +1000,7 @@ struct ItemDetailView: View {
             } label: {
                 Image(systemName: item.isFavorite ? "heart.fill" : "heart")
                     .foregroundStyle(item.isFavorite ? MaybePalette.coral : MaybePalette.ink)
+                    .symbolEffect(.bounce, value: item.isFavorite)
             }
             .buttonStyle(RoundKeycapButtonStyle(color: Color.white.opacity(0.75), size: 46))
             .accessibilityLabel(item.isFavorite ? "Remove favourite" : "Favourite")
@@ -1157,8 +1191,10 @@ struct SurpriseView: View {
                         currentItem.isFavorite = true
                         currentItem.modifiedAt = .now
                         try? modelContext.save()
+                        MaybeHaptics.saved()
                     } label: {
                         Image(systemName: "heart.fill")
+                            .symbolEffect(.bounce, value: currentItem.isFavorite)
                     }
                     .buttonStyle(KeycapButtonStyle(color: MaybePalette.coral, cornerRadius: 18))
                     .accessibilityLabel("Keep around")

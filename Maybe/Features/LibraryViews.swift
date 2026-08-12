@@ -212,13 +212,16 @@ struct InboxView: View {
                             Text("\(inboxItems.count)")
                                 .font(.system(size: 14, weight: .black, design: .rounded))
                                 .monospacedDigit()
+                                .contentTransition(.numericText())
                                 .foregroundStyle(MaybePalette.ink)
                                 .frame(minWidth: 34, minHeight: 34)
                                 .background { KeycapSurface(color: MaybePalette.blue, cornerRadius: 12, depth: 2) }
+                                .transition(.scale.combined(with: .opacity))
                                 .accessibilityLabel("\(inboxItems.count) new")
                         }
                         Button(action: reviewAll) {
                             Image(systemName: "checkmark")
+                                .symbolEffect(.bounce, value: inboxItems.count)
                         }
                         .buttonStyle(RoundKeycapButtonStyle(color: Color.white.opacity(0.75), size: 42))
                         .disabled(inboxItems.isEmpty)
@@ -274,9 +277,11 @@ struct InboxView: View {
             .padding(.horizontal, MaybeMetrics.pageInset)
             .padding(.top, 8)
             .padding(.bottom, 24)
+            .animation(.snappy(duration: 0.28), value: inboxItems.count)
         }
         .background(CreamCanvas())
         .toolbar(.hidden, for: .navigationBar)
+        .sensoryFeedback(.selection, trigger: filter)
         .sheet(item: $editingItem) { item in
             EditItemSheet(item: item)
                 .presentationDetents([.large])
@@ -322,7 +327,9 @@ struct InboxView: View {
 
     private func review(_ item: SavedItem) {
         do {
-            try LibraryMutationService.markReviewed(item, in: modelContext)
+            try withAnimation(.snappy(duration: 0.28)) {
+                try LibraryMutationService.markReviewed(item, in: modelContext)
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -340,11 +347,13 @@ struct InboxView: View {
 
     private func reviewAll() {
         do {
-            for item in allItems where item.isInbox {
-                item.isInbox = false
-                item.modifiedAt = .now
+            try withAnimation(.snappy(duration: 0.28)) {
+                for item in allItems where item.isInbox {
+                    item.isInbox = false
+                    item.modifiedAt = .now
+                }
+                try modelContext.save()
             }
-            try modelContext.save()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -353,7 +362,10 @@ struct InboxView: View {
     private func deleteSelected() {
         guard let item = deleteCandidate else { return }
         do {
-            try LibraryMutationService.delete(item, in: modelContext)
+            try withAnimation(.snappy(duration: 0.28)) {
+                try LibraryMutationService.delete(item, in: modelContext)
+            }
+            MaybeHaptics.removed()
             deleteCandidate = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -537,7 +549,9 @@ struct LibrarySearchView: View {
             .padding(.top, 8)
             .padding(.bottom, 24)
         }
+        .scrollDismissesKeyboard(.interactively)
         .background(CreamCanvas())
+        .sensoryFeedback(.selection, trigger: scope)
         .navigationTitle("Find")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(

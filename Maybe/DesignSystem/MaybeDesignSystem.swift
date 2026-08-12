@@ -1,4 +1,24 @@
 import SwiftUI
+import UIKit
+
+// MARK: - Haptics
+
+/// Controls are physical, content is not: keycaps and confirmations speak,
+/// cards and photos stay quiet.
+@MainActor
+enum MaybeHaptics {
+    static func saved() {
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+    }
+
+    static func blocked() {
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+    }
+
+    static func removed() {
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred(intensity: 0.7)
+    }
+}
 
 // MARK: - Palette
 
@@ -202,6 +222,9 @@ struct KeycapButtonStyle: ButtonStyle {
             }
             .offset(y: configuration.isPressed && !reduceMotion ? depth - 1 : 0)
             .animation(reduceMotion ? nil : .spring(response: 0.2, dampingFraction: 0.72), value: configuration.isPressed)
+            .sensoryFeedback(trigger: configuration.isPressed) { _, pressed in
+                pressed ? .impact(weight: .light, intensity: 0.7) : nil
+            }
     }
 }
 
@@ -234,10 +257,14 @@ struct RoundKeycapButtonStyle: ButtonStyle {
             }
             .offset(y: configuration.isPressed && !reduceMotion ? depth - 1 : 0)
             .animation(reduceMotion ? nil : .spring(response: 0.2, dampingFraction: 0.72), value: configuration.isPressed)
+            .sensoryFeedback(trigger: configuration.isPressed) { _, pressed in
+                pressed ? .impact(weight: .light, intensity: 0.7) : nil
+            }
     }
 }
 
 /// Press feedback for things that are not keycaps (tiles, rows, thumbnails).
+/// Deliberately silent: only controls are meant to feel physical.
 struct PressableStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var scale: CGFloat = 0.975

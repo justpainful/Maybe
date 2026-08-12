@@ -152,6 +152,8 @@ private struct MaybeTabBar: View {
     @Binding var selection: AppTab
     let onAdd: () -> Void
 
+    @Namespace private var keycapNamespace
+
     var body: some View {
         HStack(spacing: 4) {
             tabButton(.home)
@@ -173,6 +175,7 @@ private struct MaybeTabBar: View {
         .glassEffect(.regular, in: Capsule())
         .overlay(Capsule().strokeBorder(Color.white.opacity(0.7), lineWidth: 1))
         .shadow(color: MaybePalette.ink.opacity(0.14), radius: 6, y: 4)
+        .sensoryFeedback(.selection, trigger: selection)
     }
 
     private func tabButton(_ tab: AppTab) -> some View {
@@ -184,6 +187,7 @@ private struct MaybeTabBar: View {
                 Image(systemName: isSelected ? tab.selectedSymbol : tab.symbol)
                     .font(.system(size: 17, weight: isSelected ? .bold : .medium))
                     .symbolRenderingMode(.monochrome)
+                    .symbolEffect(.bounce, value: isSelected)
                 Text(tab.title)
                     .font(.system(size: 10, weight: .bold, design: .rounded))
             }
@@ -192,7 +196,10 @@ private struct MaybeTabBar: View {
             .frame(height: 46)
             .background {
                 if isSelected {
+                    // One keycap that slides between tabs rather than four that
+                    // blink in and out.
                     KeycapSurface(color: tab.accent, cornerRadius: 15, depth: 2)
+                        .matchedGeometryEffect(id: "selected-tab", in: keycapNamespace)
                 }
             }
             .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))

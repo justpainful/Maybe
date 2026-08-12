@@ -85,6 +85,7 @@ struct AddToIdeaSheet: View {
     private func add(to idea: Idea) {
         do {
             try LibraryMutationService.add(item, to: idea, in: modelContext)
+            MaybeHaptics.saved()
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
@@ -201,6 +202,7 @@ struct EditItemSheet: View {
                     .padding(.top, 10)
                     .padding(.bottom, 28)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle("Edit")
             .navigationBarTitleDisplayMode(.inline)
@@ -251,6 +253,7 @@ struct EditItemSheet: View {
                         LocalAttachmentImage(attachment: attachment, accessibilityTitle: item.title)
                             .frame(width: 92, height: 112)
                             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .transition(.scale(scale: 0.85).combined(with: .opacity))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                                     .strokeBorder(MaybePalette.hairline, lineWidth: 1)
@@ -301,6 +304,7 @@ struct EditItemSheet: View {
                     }
                 }
                 .padding(.vertical, 4)
+                .animation(.snappy(duration: 0.28), value: item.imageCount)
             }
             .contentMargins(.horizontal, 0, for: .scrollContent)
         }
@@ -331,6 +335,7 @@ struct EditItemSheet: View {
             guard !payloads.isEmpty else { return }
             do {
                 try LibraryMutationService.addPhotos(payloads, to: item, in: modelContext)
+                MaybeHaptics.saved()
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -341,6 +346,7 @@ struct EditItemSheet: View {
         guard let attachment = removalCandidate else { return }
         do {
             try LibraryMutationService.removeMedia(attachment, from: item, in: modelContext)
+            MaybeHaptics.removed()
             removalCandidate = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -360,6 +366,7 @@ struct EditItemSheet: View {
                 isInbox: isInbox,
                 in: modelContext
             )
+            MaybeHaptics.saved()
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
@@ -477,6 +484,7 @@ struct EditIdeaSheet: View {
                     .padding(.top, 10)
                     .padding(.bottom, 28)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
             .navigationTitle("Edit idea")
             .navigationBarTitleDisplayMode(.inline)
@@ -551,6 +559,7 @@ struct EditIdeaSheet: View {
                 from: items,
                 in: modelContext
             )
+            MaybeHaptics.saved()
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
