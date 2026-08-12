@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ios-${{ github.ref }}
@@ -12,7 +13,7 @@ concurrency:
 jobs:
   build-and-test:
     runs-on: macos-26
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@v5
@@ -38,46 +39,76 @@ jobs:
             -derivedDataPath DerivedData \
             -resultBundlePath artifacts/MaybeTests.xcresult
 
+      - name: Package unsigned device IPA
+        run: |
+          set -euo pipefail
+          xcodebuild build \
+            -project Maybe.xcodeproj \
+            -scheme Maybe \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath DerivedDataDevice \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+          APP_PATH=$(find DerivedDataDevice/Build/Products/Release-iphoneos -maxdepth 2 -name Maybe.app -print -quit)
+          test -n "$APP_PATH"
+          mkdir -p artifacts/ipa/Payload
+          ditto "$APP_PATH" artifacts/ipa/Payload/Maybe.app
+          (
+            cd artifacts/ipa
+            ditto -c -k --sequesterRsrc --keepParent Payload Maybe-current-unsigned.ipa
+            rm -rf Payload
+          )
+
       - name: Capture simulator screenshots
         run: |
           set -euo pipefail
           mkdir -p artifacts/screenshots
 
+          BUNDLE_ID=com.justpainful.Maybe
           xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
           sleep 5
-          xcrun simctl status_bar "$SIMULATOR_UDID" override --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
+          xcrun simctl status_bar "$SIMULATOR_UDID" override \
+            --time 9:41 --batteryState charged --batteryLevel 100 --wifiBars 3 --cellularBars 4
 
           APP_PATH=$(find DerivedData/Build/Products/Debug-iphonesimulator -maxdepth 2 -name Maybe.app -print -quit)
+          test -n "$APP_PATH"
+
+          shoot() {
+            NAME="$1"
+            shift
+            xcrun simctl terminate "$SIMULATOR_UDID" "$BUNDLE_ID" 2>/dev/null || true
+            sleep 1
+            xcrun simctl launch "$SIMULATOR_UDID" "$BUNDLE_ID" "$@" >/dev/null
+            sleep 4
+            xcrun simctl io "$SIMULATOR_UDID" screenshot "artifacts/screenshots/$NAME.png"
+          }
+
+          # A first run with an empty library, then the same build seeded with
+          # sample photos of several real aspect ratios.
+          xcrun simctl uninstall "$SIMULATOR_UDID" "$BUNDLE_ID" 2>/dev/null || true
+          xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
+          shoot 00-empty-home
+          shoot 01-empty-add --show-add
+
+          xcrun simctl terminate "$SIMULATOR_UDID" "$BUNDLE_ID" 2>/dev/null || true
+          xcrun simctl uninstall "$SIMULATOR_UDID" "$BUNDLE_ID"
           xcrun simctl install "$SIMULATOR_UDID" "$APP_PATH"
 
-          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe
-          sleep 5
-          xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/home.png
-
-          xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
-          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --show-add
-          sleep 3
-          xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/add-sheet.png
-
-          xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
-          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --show-inbox
-          sleep 3
-          xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/inbox.png
-
-          xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
-          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --show-ideas
-          sleep 3
-          xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/ideas.png
-
-          xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
-          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --show-search
-          sleep 3
-          xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/search.png
-
-          xcrun simctl terminate "$SIMULATOR_UDID" com.justpainful.Maybe
-          xcrun simctl launch "$SIMULATOR_UDID" com.justpainful.Maybe --show-settings
-          sleep 3
-          xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts/screenshots/settings.png
+          shoot 02-home --use-sample-data
+          shoot 03-inbox --use-sample-data --show-inbox
+          shoot 04-ideas --use-sample-data --show-ideas
+          shoot 05-idea-detail --use-sample-data --show-idea-detail
+          shoot 06-item-detail --use-sample-data --show-detail
+          shoot 07-search --use-sample-data --show-search
+          shoot 08-add-empty --use-sample-data --show-add
+          shoot 09-add-filled --use-sample-data --show-add --qa-composer-photos
+          shoot 10-new-idea --use-sample-data --show-new-idea
+          shoot 10b-edit-item --use-sample-data --show-edit
+          shoot 11-surprise --use-sample-data --show-surprise
+          shoot 12-settings --use-sample-data --show-settings
 
       - name: Upload CI artifacts
         if: always()

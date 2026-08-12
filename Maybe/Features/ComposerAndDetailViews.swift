@@ -4,33 +4,50 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UIKit
 
+// MARK: - Add
+
+struct PhotoDraft: Identifiable {
+    let id = UUID()
+    let data: Data
+    let preview: UIImage
+    let aspect: CGFloat
+}
+
+enum ComposerField: Hashable {
+    case note
+    case link
+    case thought
+}
+
 struct AddMaybeSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \SavedItem.modifiedAt, order: .reverse) private var existingItems: [SavedItem]
 
     @State private var kind: MaybeKind = .photo
-    @State private var title = ""
+    @State private var name = ""
     @State private var thought = ""
     @State private var sourceURL = ""
-    @State private var tags = ""
-    @State private var photoSelection: PhotosPickerItem?
-    @State private var payload: Data?
-    @State private var payloadFilename: String?
+    @State private var selectedTags: [String] = []
+    @State private var photoSelections: [PhotosPickerItem] = []
+    @State private var photoDrafts: [PhotoDraft] = []
+    @State private var filePayload: Data?
+    @State private var fileName: String?
     @State private var isChoosingFile = false
+    @State private var isChoosingPhotos = false
+    @State private var isLoadingPhotos = false
     @State private var isSaving = false
-    @State private var duplicateTitle: String?
+    @State private var duplicateItem: SavedItem?
+    @State private var duplicatePreview: SavedItem?
     @State private var errorMessage: String?
-
-    private let mediaStore = LocalMediaStore()
-    private let typeColumns = Array(repeating: GridItem(.flexible(), spacing: 10), count: 2)
+    @FocusState private var focusedField: ComposerField?
 
     private var recentTags: [String] {
         var seen = Set<String>()
         return existingItems
             .flatMap(\.tagNames)
             .filter { seen.insert($0.lowercased()).inserted }
-            .prefix(4)
+            .prefix(8)
             .map { $0 }
     }
 
@@ -38,224 +55,407 @@ struct AddMaybeSheet: View {
         NavigationStack {
             ZStack {
                 CreamCanvas()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        typePicker
-                        contentInput
-                        thoughtInput
-                        tagsInput
-                    }
-                    .padding(.horizontal, MaybeMetrics.pageInset)
-                    .padding(.top, 14)
-                    .padding(.bottom, 18)
-                }
-            }
-            .navigationTitle("Add to Maybe")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark")
-                    }
-                    .accessibilityLabel("Close")
-                }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                Button(action: save) {
-                    HStack {
-                        if isSaving {
-                            ProgressView().tint(MaybePalette.ink)
-                        } else {
-                            Image(systemName: "arrow.down.to.line.compact")
+
+                VStack(spacing: 0) {
+                    header
+
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 22) {
+                            kindRow
+                            contentBlock
+                            thoughtBlock
+                            tagBlock
                         }
-                        Text(isSaving ? "Saving…" : "Save to Inbox")
+                        .padding(.horizontal, MaybeMetrics.pageInset)
+                        .padding(.top, 4)
+                        .padding(.bottom, 24)
                     }
-                    .frame(maxWidth: .infinity)
+                    .scrollDismissesKeyboard(.interactively)
                 }
-                .buttonStyle(KeycapButtonStyle(color: MaybePalette.yellow, cornerRadius: 20, depth: 3))
-                .disabled(isSaving)
-                .accessibilityIdentifier("save-maybe-button")
-                .padding(.horizontal, MaybeMetrics.pageInset)
-                .padding(.top, 10)
-                .padding(.bottom, 8)
-                .background(MaybePalette.cream.opacity(0.96))
             }
+            .toolbar(.hidden, for: .navigationBar)
+            .sensoryFeedback(.selection, trigger: kind)
+            .safeAreaInset(edge: .bottom, spacing: 0) { saveBar }
+            .photosPicker(
+                isPresented: $isChoosingPhotos,
+                selection: $photoSelections,
+                maxSelectionCount: 12,
+                matching: .images
+            )
             .fileImporter(
                 isPresented: $isChoosingFile,
                 allowedContentTypes: [.item],
                 allowsMultipleSelection: false,
                 onCompletion: importFile
             )
-            .onChange(of: photoSelection) { _, newValue in
-                guard let newValue else { return }
-                Task {
-                    do {
-                        payload = try await newValue.loadTransferable(type: Data.self)
-                        payloadFilename = "Maybe-photo.jpg"
-                    } catch {
-                        errorMessage = error.localizedDescription
-                    }
-                }
+            .onChange(of: photoSelections) { _, selections in
+                guard !selections.isEmpty else { return }
+                loadPhotos(selections)
             }
+            .task { preloadQAPhotosIfRequested() }
             .alert("Already in Maybe", isPresented: duplicateAlertBinding) {
-                Button("Open it later", role: .cancel) {}
+                Button("Open the one you kept") {
+                    duplicatePreview = duplicateItem
+                    duplicateItem = nil
+                }
+                Button("Cancel", role: .cancel) { duplicateItem = nil }
             } message: {
-                Text("This file is already saved as “\(duplicateTitle ?? "an existing Maybe")”.")
+                Text("“\(duplicateItem?.title ?? "It")” is already saved.")
             }
             .alert("Couldn’t save", isPresented: errorAlertBinding) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(errorMessage ?? "Please try again.")
             }
-        }
-    }
-
-    private var typePicker: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("What are you keeping?")
-                .font(.maybeRounded(21, weight: .bold))
-
-            LazyVGrid(columns: typeColumns, spacing: 10) {
-                ForEach(MaybeKind.allCases) { option in
-                    Button {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.78)) {
-                            kind = option
+            .fullScreenCover(item: $duplicatePreview) { item in
+                NavigationStack {
+                    ItemDetailView(item: item)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarLeading) {
+                                Button("Done") { duplicatePreview = nil }
+                            }
                         }
-                    } label: {
-                        Label(option.title, systemImage: option.symbol)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(
-                        KeycapButtonStyle(
-                            color: kind == option ? accent(for: option) : MaybePalette.glassWhite,
-                            cornerRadius: 17,
-                            depth: 3
-                        )
-                    )
-                    .accessibilityIdentifier("kind-\(option.rawValue)")
                 }
             }
         }
     }
 
+    // MARK: Header and save bar
+
+    private var header: some View {
+        HStack {
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+            }
+            .buttonStyle(RoundKeycapButtonStyle(color: Color.white.opacity(0.75), size: 40))
+            .accessibilityLabel("Close")
+
+            Spacer()
+
+            Text("Add")
+                .font(.maybeRounded(19, weight: .black))
+                .foregroundStyle(MaybePalette.ink)
+
+            Spacer()
+
+            Color.clear.frame(width: 40, height: 40)
+        }
+        .padding(.horizontal, MaybeMetrics.pageInset)
+        .padding(.top, 14)
+        .padding(.bottom, 14)
+    }
+
+    private var saveBar: some View {
+        Button(action: save) {
+            Text(isSaving ? "Saving…" : "Save to Inbox")
+        }
+        .buttonStyle(
+            KeycapButtonStyle(
+                color: canSave ? MaybePalette.yellow : Color.white.opacity(0.5),
+                cornerRadius: 20,
+                minHeight: 54
+            )
+        )
+        .disabled(isSaving || !canSave)
+        .opacity(canSave ? 1 : 0.75)
+        .accessibilityIdentifier("save-maybe-button")
+        .padding(.horizontal, MaybeMetrics.pageInset)
+        .padding(.top, 10)
+        .padding(.bottom, 10)
+        .background(MaybePalette.cream.opacity(0.94))
+    }
+
+    // MARK: Kind
+
+    private var kindRow: some View {
+        HStack(spacing: 8) {
+            ForEach(MaybeKind.allCases) { option in
+                Button {
+                    kind = option
+                    // Choosing Note or Link is choosing to type: skip the extra tap.
+                    switch option {
+                    case .note: focusedField = .note
+                    case .link: focusedField = .link
+                    case .photo, .file: focusedField = nil
+                    }
+                } label: {
+                    VStack(spacing: 5) {
+                        Image(systemName: option.symbol)
+                            .font(.system(size: 17, weight: .bold))
+                        Text(option.title)
+                            .font(.system(size: 11.5, weight: .bold, design: .rounded))
+                    }
+                    .foregroundStyle(MaybePalette.ink)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 58)
+                    .background {
+                        KeycapSurface(
+                            color: kind == option ? option.accent : Color.white.opacity(0.6),
+                            cornerRadius: 16,
+                            depth: kind == option ? 2 : 3
+                        )
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle(scale: 0.96))
+                .accessibilityIdentifier("kind-\(option.rawValue)")
+                .accessibilityAddTraits(kind == option ? .isSelected : [])
+            }
+        }
+    }
+
+    // MARK: Content
+
     @ViewBuilder
-    private var contentInput: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            switch kind {
-            case .photo:
-                let isReady = payload != nil
-                PhotosPicker(selection: $photoSelection, matching: .images) {
-                    MaybePickerSurface(
-                        symbol: isReady ? "checkmark.circle.fill" : "photo.badge.plus",
-                        title: isReady ? "Photo ready" : "Choose a photo",
-                        subtitle: isReady ? "Tap to choose another" : "It stays on this device",
-                        color: MaybePalette.blue
-                    )
-                }
-                .buttonStyle(.plain)
-
-            case .link:
-                inputCard {
-                    Label("Link", systemImage: "link")
-                        .font(.system(.subheadline, design: .rounded, weight: .bold))
-                    TextField("https://", text: $sourceURL)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                        .autocorrectionDisabled()
-                }
-
-            case .note:
-                inputCard {
-                    Label("Your note", systemImage: "text.quote")
-                        .font(.system(.subheadline, design: .rounded, weight: .bold))
-                    TextField("A thought worth keeping…", text: $title, axis: .vertical)
-                        .lineLimit(3...7)
-                        .font(.system(.title3, design: .rounded, weight: .semibold))
-                }
-
-            case .file:
+    private var contentBlock: some View {
+        switch kind {
+        case .photo:
+            photoBlock
+        case .link:
+            VStack(alignment: .leading, spacing: 10) {
+                fieldLabel("Link")
+                TextField("https://", text: $sourceURL)
+                    .textInputAutocapitalization(.never)
+                    .keyboardType(.URL)
+                    .autocorrectionDisabled()
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .focused($focusedField, equals: .link)
+                    .padding(16)
+                    .maybePanel(cornerRadius: 18)
+                nameField
+            }
+        case .note:
+            VStack(alignment: .leading, spacing: 10) {
+                fieldLabel("Note")
+                TextField("Something worth keeping…", text: $name, axis: .vertical)
+                    .lineLimit(4...10)
+                    .font(.system(size: 19, weight: .semibold, design: .rounded))
+                    .focused($focusedField, equals: .note)
+                    .padding(16)
+                    .maybePanel(cornerRadius: 18)
+            }
+        case .file:
+            VStack(alignment: .leading, spacing: 10) {
+                fieldLabel("File")
                 Button {
                     isChoosingFile = true
                 } label: {
-                    MaybePickerSurface(
-                        symbol: payload == nil ? "doc.badge.plus" : "checkmark.circle.fill",
-                        title: payloadFilename ?? "Choose a file",
-                        subtitle: payload == nil ? "A local copy goes into Maybe" : "Tap to choose another",
-                        color: MaybePalette.purple
-                    )
+                    HStack(spacing: 12) {
+                        Image(systemName: filePayload == nil ? "doc.badge.plus" : "doc.fill")
+                            .font(.system(size: 18, weight: .bold))
+                        Text(fileName ?? "Choose a file")
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(MaybePalette.inkFaint)
+                    }
+                    .foregroundStyle(MaybePalette.ink)
+                    .padding(16)
+                    .maybePanel(cornerRadius: 18)
                 }
-                .buttonStyle(.plain)
-            }
-
-            if kind != .note {
-                inputCard {
-                    TextField("Give it a name (optional)", text: $title)
-                        .font(.system(.title3, design: .rounded, weight: .semibold))
-                }
+                .buttonStyle(PressableStyle())
+                nameField
             }
         }
     }
 
-    private var thoughtInput: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 7) {
-                Text("What caught you?")
-                    .font(.maybeRounded(21, weight: .bold))
-                Text("optional")
-                    .font(.caption)
-                    .foregroundStyle(MaybePalette.ink.opacity(0.45))
-            }
-            inputCard {
-                TextField("The floating controls…", text: $thought, axis: .vertical)
-                    .lineLimit(2...6)
-            }
-        }
-    }
-
-    private var tagsInput: some View {
+    private var photoBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Tags")
-                .font(.maybeRounded(21, weight: .bold))
-            inputCard {
-                TextField("UI, Glass, Motion", text: $tags)
-                    .textInputAutocapitalization(.words)
+            HStack(spacing: 8) {
+                fieldLabel(photoDrafts.isEmpty ? "Photos" : "\(photoDrafts.count) selected")
+                if isLoadingPhotos {
+                    ProgressView().controlSize(.small)
+                }
+                Spacer(minLength: 0)
+                if !photoDrafts.isEmpty {
+                    Button("Clear") {
+                        withAnimation(.snappy(duration: 0.25)) {
+                            photoDrafts = []
+                        }
+                        photoSelections = []
+                    }
+                    .font(.maybeMeta)
+                    .foregroundStyle(MaybePalette.ink)
+                }
             }
 
-            if !recentTags.isEmpty {
-                TagGrid(tags: recentTags, accent: MaybePalette.green)
+            if photoDrafts.isEmpty {
+                Button {
+                    isChoosingPhotos = true
+                } label: {
+                    VStack(spacing: 8) {
+                        Image(systemName: "photo.badge.plus")
+                            .font(.system(size: 24, weight: .bold))
+                        Text("Choose photos")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                        Text("Up to 12, kept on this device")
+                            .font(.system(size: 12))
+                            .foregroundStyle(MaybePalette.inkSoft)
+                    }
+                    .foregroundStyle(MaybePalette.ink)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 132)
+                    .background {
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .fill(MaybePalette.blue.opacity(0.16))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .strokeBorder(
+                                        MaybePalette.ink.opacity(0.18),
+                                        style: StrokeStyle(lineWidth: 1.5, dash: [7, 5])
+                                    )
+                            }
+                    }
+                }
+                .buttonStyle(PressableStyle())
+                .accessibilityIdentifier("choose-photos-button")
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(photoDrafts) { draft in
+                            photoThumbnail(draft)
+                        }
+
+                        if photoDrafts.count < 12 {
+                            Button {
+                                isChoosingPhotos = true
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 20, weight: .bold))
+                                    .foregroundStyle(MaybePalette.ink)
+                                    .frame(width: 84, height: 106)
+                                    .background {
+                                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                            .fill(MaybePalette.blue.opacity(0.16))
+                                            .overlay {
+                                                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                                    .strokeBorder(
+                                                        MaybePalette.ink.opacity(0.18),
+                                                        style: StrokeStyle(lineWidth: 1.5, dash: [7, 5])
+                                                    )
+                                            }
+                                    }
+                            }
+                            .buttonStyle(PressableStyle())
+                            .accessibilityLabel("Add more photos")
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .contentMargins(.horizontal, 0, for: .scrollContent)
+
+                nameField
             }
         }
     }
 
-    private func inputCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10, content: content)
-            .padding(17)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.white.opacity(0.46), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
-            .maybeGlass(cornerRadius: 21)
+    private func photoThumbnail(_ draft: PhotoDraft) -> some View {
+        Image(uiImage: draft.preview)
+            .resizable()
+            .aspectRatio(contentMode: .fill)
+            .frame(width: 84, height: 106)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .transition(.scale(scale: 0.85).combined(with: .opacity))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(MaybePalette.hairline, lineWidth: 1)
+            }
+            .overlay(alignment: .topTrailing) {
+                Button {
+                    withAnimation(.snappy(duration: 0.25)) {
+                        photoDrafts.removeAll { $0.id == draft.id }
+                    }
+                    MaybeHaptics.removed()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .black))
+                        .foregroundStyle(MaybePalette.ink)
+                        .frame(width: 26, height: 26)
+                        .background(Color.white.opacity(0.85), in: Circle())
+                        .overlay(Circle().strokeBorder(MaybePalette.hairline, lineWidth: 1))
+                }
+                .buttonStyle(PressableStyle(scale: 0.9))
+                .padding(6)
+                .accessibilityLabel("Remove photo")
+            }
     }
 
-    private func accent(for kind: MaybeKind) -> Color {
-        switch kind {
-        case .photo: MaybePalette.blue
-        case .link: MaybePalette.green
-        case .note: MaybePalette.yellow
-        case .file: MaybePalette.purple
+    private var nameField: some View {
+        TextField("Name it (optional)", text: $name)
+            .font(.system(size: 16, weight: .semibold, design: .rounded))
+            .padding(16)
+            .maybePanel(cornerRadius: 18)
+    }
+
+    // MARK: Thought and tags
+
+    private var thoughtBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            fieldLabel("What caught you?")
+            TextField("The way the light sits on the edge…", text: $thought, axis: .vertical)
+                .lineLimit(2...6)
+                .font(.system(size: 16))
+                .focused($focusedField, equals: .thought)
+                .padding(16)
+                .maybePanel(cornerRadius: 18)
+                .accessibilityIdentifier("thought-field")
         }
     }
 
-    private var duplicateAlertBinding: Binding<Bool> {
-        Binding(
-            get: { duplicateTitle != nil },
-            set: { if !$0 { duplicateTitle = nil } }
-        )
+    private var tagBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            fieldLabel("Tags")
+            TagEditor(tags: $selectedTags, suggestions: recentTags)
+        }
     }
 
-    private var errorAlertBinding: Binding<Bool> {
-        Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )
+    private func fieldLabel(_ text: String) -> some View {
+        Text(text)
+            .font(.maybeSectionTitle)
+            .foregroundStyle(MaybePalette.ink)
+    }
+
+    // MARK: Actions
+
+    private func loadPhotos(_ selections: [PhotosPickerItem]) {
+        isLoadingPhotos = true
+        Task {
+            var loaded: [PhotoDraft] = []
+            for selection in selections {
+                guard photoDrafts.count + loaded.count < 12 else { break }
+                guard let data = try? await selection.loadTransferable(type: Data.self),
+                      let draft = makeDraft(from: data) else { continue }
+                loaded.append(draft)
+            }
+            withAnimation(.snappy(duration: 0.28)) {
+                photoDrafts.append(contentsOf: loaded)
+            }
+            photoSelections = []
+            isLoadingPhotos = false
+        }
+    }
+
+    private func makeDraft(from data: Data) -> PhotoDraft? {
+        guard let image = UIImage(data: data) else { return nil }
+        let preview = image.preparingThumbnail(of: CGSize(width: 400, height: 400)) ?? image
+        let size = MediaIngest.pixelSize(of: data)
+        let aspect = size.height > 0 ? size.width / size.height : 1
+        return PhotoDraft(data: data, preview: preview, aspect: aspect)
+    }
+
+    private func preloadQAPhotosIfRequested() {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard arguments.contains("--qa-composer-photos"), photoDrafts.isEmpty else { return }
+        let sizes = [(1200, 1600), (1600, 1100), (1080, 1080)]
+        for (index, size) in sizes.enumerated() {
+            guard let data = SamplePhotoFactory.jpeg(width: size.0, height: size.1, seed: index + 2),
+                  let draft = makeDraft(from: data) else { continue }
+            photoDrafts.append(draft)
+        }
+        thought = "The way the light sits on the top edge."
+        selectedTags = ["UI", "Glass"]
     }
 
     private func importFile(_ result: Result<[URL], Error>) {
@@ -263,10 +463,52 @@ struct AddMaybeSheet: View {
             guard let url = try result.get().first else { return }
             let accessing = url.startAccessingSecurityScopedResource()
             defer { if accessing { url.stopAccessingSecurityScopedResource() } }
-            payload = try Data(contentsOf: url)
-            payloadFilename = url.lastPathComponent
+            filePayload = try Data(contentsOf: url)
+            fileName = url.lastPathComponent
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private var canSave: Bool {
+        switch kind {
+        case .photo:
+            return !photoDrafts.isEmpty
+        case .link:
+            guard let url = URL(string: sourceURL.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
+            return ["http", "https"].contains(url.scheme?.lowercased() ?? "")
+        case .note:
+            return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !thought.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case .file:
+            return filePayload != nil
+        }
+    }
+
+    private var duplicateAlertBinding: Binding<Bool> {
+        Binding(get: { duplicateItem != nil }, set: { if !$0 { duplicateItem = nil } })
+    }
+
+    private var errorAlertBinding: Binding<Bool> {
+        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+    }
+
+    private var resolvedTitle: String {
+        let typed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !typed.isEmpty { return String(typed.prefix(120)) }
+
+        let thoughtText = thought.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !thoughtText.isEmpty { return String(thoughtText.prefix(80)) }
+
+        switch kind {
+        case .photo:
+            return photoDrafts.count > 1 ? "\(photoDrafts.count) photos" : "Photo"
+        case .link:
+            return URL(string: sourceURL)?.host() ?? "Link"
+        case .note:
+            return "Note"
+        case .file:
+            return fileName ?? "File"
         }
     }
 
@@ -275,97 +517,89 @@ struct AddMaybeSheet: View {
         defer { isSaving = false }
 
         do {
-            if let payload {
+            let payloads: [Data] = kind == .photo
+                ? photoDrafts.map(\.data)
+                : (filePayload.map { [$0] } ?? [])
+
+            let attachments = try modelContext.fetch(FetchDescriptor<MediaAttachment>())
+            for payload in payloads {
                 let hash = LocalMediaStore.hash(payload)
-                let attachments = try modelContext.fetch(FetchDescriptor<MediaAttachment>())
-                if let duplicate = attachments.first(where: { $0.sha256 == hash }) {
-                    duplicateTitle = duplicate.item?.title ?? duplicate.originalFilename
+                if let duplicate = attachments.first(where: { $0.sha256 == hash }), let owner = duplicate.item {
+                    duplicateItem = owner
+                    MaybeHaptics.blocked()
                     return
                 }
             }
 
-            let normalizedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
-            let fallbackTitle: String
-            switch kind {
-            case .photo: fallbackTitle = "A photo that caught me"
-            case .link: fallbackTitle = URL(string: sourceURL)?.host() ?? "A link worth keeping"
-            case .note: fallbackTitle = thought.isEmpty ? "A thought" : thought
-            case .file: fallbackTitle = payloadFilename ?? "A saved file"
+            let trimmedSource = sourceURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            if kind == .link {
+                let normalized = normalizedLink(trimmedSource)
+                if let existing = existingItems.first(where: { normalizedLink($0.sourceURLString ?? "") == normalized }) {
+                    duplicateItem = existing
+                    MaybeHaptics.blocked()
+                    return
+                }
             }
 
+            let thoughtText = thought.trimmingCharacters(in: .whitespacesAndNewlines)
+            let title = resolvedTitle
             let item = SavedItem(
                 kind: kind,
-                title: normalizedTitle.isEmpty ? fallbackTitle : normalizedTitle,
-                note: thought.trimmingCharacters(in: .whitespacesAndNewlines),
-                sourceURLString: sourceURL.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty,
+                title: title,
+                note: thoughtText == title ? "" : thoughtText,
+                sourceURLString: trimmedSource.isEmpty ? nil : trimmedSource,
                 isInbox: true,
-                tagNames: parsedTags,
-                accentHex: MaybePalette.accentHexes[existingItems.count % MaybePalette.accentHexes.count],
-                visualSeed: existingItems.count % 5
+                tagNames: selectedTags,
+                accentHex: MaybePalette.accentHex(at: existingItems.count)
             )
             modelContext.insert(item)
 
-            if let payload {
-                let mediaKind: MediaKind = kind == .photo ? .image : .file
-                let filename = payloadFilename ?? "attachment"
-                let path = try mediaStore.write(payload, filename: filename, kind: mediaKind)
-                let image = UIImage(data: payload)
-                let attachment = MediaAttachment(
-                    type: mediaKind,
-                    localPath: path,
-                    width: image.map { Double($0.size.width) } ?? 0,
-                    height: image.map { Double($0.size.height) } ?? 0,
-                    originalFilename: filename,
-                    sha256: LocalMediaStore.hash(payload),
-                    item: item
+            if kind == .photo {
+                for (index, draft) in photoDrafts.enumerated() {
+                    try MediaIngest.attach(
+                        draft.data,
+                        kind: .image,
+                        filename: LocalMediaStore.photoFilename(index: index),
+                        to: item
+                    )
+                }
+            } else if let filePayload {
+                try MediaIngest.attach(
+                    filePayload,
+                    kind: .file,
+                    filename: fileName ?? "attachment",
+                    to: item
                 )
-                item.media.append(attachment)
             }
 
             try modelContext.save()
+            MaybeHaptics.saved()
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
         }
     }
 
-    private var parsedTags: [String] {
-        tags
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+    private func normalizedLink(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .lowercased()
     }
 }
 
-private struct MaybePickerSurface: View {
-    let symbol: String
-    let title: String
-    let subtitle: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 16) {
-            Image(systemName: symbol)
-                .font(.system(size: 28, weight: .bold))
-                .frame(width: 58, height: 56)
-                .background(color.opacity(0.72), in: RoundedRectangle(cornerRadius: 19, style: .continuous))
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.system(.headline, design: .rounded, weight: .bold))
-                Text(subtitle)
-                    .font(.caption)
-                    .foregroundStyle(MaybePalette.ink.opacity(0.54))
-            }
-            Spacer()
-            Image(systemName: "chevron.right")
-                .font(.caption.bold())
+extension MaybeKind {
+    var accent: Color {
+        switch self {
+        case .photo: MaybePalette.blue
+        case .link: MaybePalette.green
+        case .note: MaybePalette.yellow
+        case .file: MaybePalette.purple
         }
-        .foregroundStyle(MaybePalette.ink)
-        .padding(14)
-        .background(Color.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
-        .maybeGlass(cornerRadius: 23, tint: color.opacity(0.12), interactive: true)
     }
 }
+
+// MARK: - New idea
 
 struct NewIdeaSheet: View {
     @Environment(\.dismiss) private var dismiss
@@ -376,82 +610,88 @@ struct NewIdeaSheet: View {
     @State private var title = ""
     @State private var note = ""
     @State private var selectedIDs: Set<UUID>
+    @State private var errorMessage: String?
 
     init(preselectedItem: SavedItem?) {
         self.preselectedItem = preselectedItem
         _selectedIDs = State(initialValue: Set(preselectedItem.map { [$0.id] } ?? []))
     }
 
+    private var selectedItems: [SavedItem] {
+        items.filter { selectedIDs.contains($0.id) }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 CreamCanvas()
+
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("Name the idea")
-                                .font(.maybeRounded(22, weight: .bold))
-                            TextField("Maybe app UI", text: $title)
-                                .font(.maybeRounded(26, weight: .bold))
-                                .padding(17)
-                                .background(Color.white.opacity(0.45), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
-                                .maybeGlass(cornerRadius: 21)
+                            TextField("Name the idea", text: $title)
+                                .font(.maybeRounded(24, weight: .black))
+                                .padding(16)
+                                .maybePanel(cornerRadius: 20)
+                                .accessibilityIdentifier("idea-title-field")
+
                             TextField("What could this become?", text: $note, axis: .vertical)
                                 .lineLimit(2...5)
-                                .padding(17)
-                                .background(Color.white.opacity(0.45), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
-                                .maybeGlass(cornerRadius: 21)
+                                .font(.system(size: 16))
+                                .padding(16)
+                                .maybePanel(cornerRadius: 20)
                         }
 
-                        VStack(alignment: .leading, spacing: 11) {
-                            Text("Inspired by")
-                                .font(.maybeRounded(22, weight: .bold))
-                            Text("Choose any things that helped shape it.")
-                                .font(.subheadline)
-                                .foregroundStyle(MaybePalette.ink.opacity(0.56))
+                        VStack(alignment: .leading, spacing: 12) {
+                            SectionHeader(
+                                title: "Inspired by",
+                                count: selectedIDs.isEmpty ? nil : selectedIDs.count
+                            )
 
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 10)], spacing: 10) {
-                                ForEach(items) { item in
-                                    Button {
-                                        if selectedIDs.contains(item.id) {
-                                            selectedIDs.remove(item.id)
-                                        } else {
-                                            selectedIDs.insert(item.id)
+                            if items.isEmpty {
+                                EmptyLibraryView(symbol: "tray", title: "Save something first.")
+                            } else {
+                                LazyVGrid(
+                                    columns: [GridItem(.adaptive(minimum: 92), spacing: 10)],
+                                    spacing: 10
+                                ) {
+                                    ForEach(items) { item in
+                                        Button {
+                                            toggle(item)
+                                        } label: {
+                                            pickerTile(item)
                                         }
-                                    } label: {
-                                        InspirationThumbnail(item: item)
-                                            .frame(height: 104)
-                                            .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
-                                            .overlay(alignment: .topTrailing) {
-                                                if selectedIDs.contains(item.id) {
-                                                    Image(systemName: "checkmark.circle.fill")
-                                                        .font(.title2)
-                                                        .foregroundStyle(MaybePalette.ink, MaybePalette.green)
-                                                        .padding(7)
-                                                }
-                                            }
-                                            .overlay {
-                                                RoundedRectangle(cornerRadius: 19, style: .continuous)
-                                                    .stroke(selectedIDs.contains(item.id) ? MaybePalette.ink : .clear, lineWidth: 2.5)
-                                            }
+                                        .buttonStyle(PressableStyle())
+                                        .accessibilityLabel(item.title)
+                                        .accessibilityAddTraits(selectedIDs.contains(item.id) ? .isSelected : [])
                                     }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel(item.title)
-                                    .accessibilityValue(selectedIDs.contains(item.id) ? "Selected" : "Not selected")
                                 }
                             }
                         }
-
-                        Button(action: save) {
-                            Label("Create idea", systemImage: "lightbulb.fill")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(KeycapButtonStyle(color: MaybePalette.green, cornerRadius: 22))
-                        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
-                    .padding(20)
-                    .padding(.bottom, 30)
+                    .padding(.horizontal, MaybeMetrics.pageInset)
+                    .padding(.top, 8)
+                    .padding(.bottom, 24)
                 }
+                .scrollDismissesKeyboard(.interactively)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Button(action: save) {
+                    Text("Create idea")
+                }
+                .buttonStyle(
+                    KeycapButtonStyle(
+                        color: canSave ? MaybePalette.green : Color.white.opacity(0.5),
+                        cornerRadius: 20,
+                        minHeight: 54
+                    )
+                )
+                .disabled(!canSave)
+                .opacity(canSave ? 1 : 0.75)
+                .accessibilityIdentifier("create-idea-button")
+                .padding(.horizontal, MaybeMetrics.pageInset)
+                .padding(.vertical, 10)
+                .background(MaybePalette.cream.opacity(0.94))
             }
             .navigationTitle("New idea")
             .navigationBarTitleDisplayMode(.inline)
@@ -460,203 +700,495 @@ struct NewIdeaSheet: View {
                     Button("Close") { dismiss() }
                 }
             }
+            .alert("Couldn’t create the idea", isPresented: errorBinding) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(errorMessage ?? "Please try again.")
+            }
+        }
+    }
+
+    private func pickerTile(_ item: SavedItem) -> some View {
+        let isSelected = selectedIDs.contains(item.id)
+        return Color.clear
+            .aspectRatio(1, contentMode: .fit)
+            .overlay { ItemPreview(item: item, size: .compact) }
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(isSelected ? MaybePalette.ink : MaybePalette.hairline, lineWidth: isSelected ? 2.5 : 1)
+            }
+            .overlay(alignment: .topTrailing) {
+                if isSelected {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .black))
+                        .foregroundStyle(MaybePalette.ink)
+                        .frame(width: 24, height: 24)
+                        .background(MaybePalette.green, in: Circle())
+                        .overlay(Circle().strokeBorder(MaybePalette.ink.opacity(0.2), lineWidth: 1))
+                        .padding(6)
+                }
+            }
+    }
+
+    private var canSave: Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var errorBinding: Binding<Bool> {
+        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+    }
+
+    private func toggle(_ item: SavedItem) {
+        withAnimation(.snappy(duration: 0.2)) {
+            if selectedIDs.contains(item.id) {
+                selectedIDs.remove(item.id)
+            } else {
+                selectedIDs.insert(item.id)
+            }
         }
     }
 
     private func save() {
-        let selectedItems = items.filter { selectedIDs.contains($0.id) }
+        let chosen = selectedItems
         let idea = Idea(
             title: title.trimmingCharacters(in: .whitespacesAndNewlines),
             note: note.trimmingCharacters(in: .whitespacesAndNewlines),
-            coverItemID: selectedItems.first?.id,
-            tagNames: Array(Set(selectedItems.flatMap(\.tagNames))).sorted(),
-            accentHex: MaybePalette.accentHexes[selectedIDs.count % MaybePalette.accentHexes.count],
-            items: selectedItems
+            coverItemID: chosen.first(where: { $0.primaryImage != nil })?.id ?? chosen.first?.id,
+            tagNames: Array(Set(chosen.flatMap(\.tagNames))).sorted(),
+            accentHex: MaybePalette.accentHex(at: chosen.count),
+            items: chosen
         )
         modelContext.insert(idea)
-        try? modelContext.save()
-        let allIdeaTitles = ((try? modelContext.fetch(FetchDescriptor<Idea>())) ?? []).map(\.title)
-        MaybeSharedContainer.publishIdeaTitles(allIdeaTitles)
-        dismiss()
+        for item in chosen {
+            item.isInbox = false
+            item.modifiedAt = .now
+        }
+
+        do {
+            try modelContext.save()
+            let titles = (try modelContext.fetch(FetchDescriptor<Idea>())).map(\.title)
+            MaybeSharedContainer.publishIdeaTitles(titles)
+            MaybeHaptics.saved()
+            dismiss()
+        } catch {
+            modelContext.delete(idea)
+            errorMessage = error.localizedDescription
+        }
     }
 }
 
+// MARK: - Item detail
+
 struct ItemDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
     let item: SavedItem
+
     @State private var ideaSeed: SavedItem?
+    @State private var isEditing = false
+    @State private var isAddingToIdea = false
+    @State private var fullScreenIndex: Int?
+    @State private var pageDocument: HTMLPageDocument?
+    @State private var isSavingPage = false
+    @State private var didCopy = false
 
     var body: some View {
         ScrollView {
-            VStack(spacing: 0) {
-                InspirationThumbnail(item: item)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 420)
-                    .clipped()
+            VStack(alignment: .leading, spacing: 22) {
+                hero
 
-                VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(alignment: .top) {
-                            Text(item.title)
-                                .font(.maybeRounded(30, weight: .black))
-                            Spacer()
-                            Button {
-                                item.isFavorite.toggle()
-                                item.modifiedAt = .now
-                            } label: {
-                                Image(systemName: item.isFavorite ? "heart.fill" : "heart")
-                                    .foregroundStyle(item.isFavorite ? MaybePalette.coral : MaybePalette.ink)
-                            }
-                            .buttonStyle(RoundKeycapButtonStyle(color: MaybePalette.glassWhite, size: 48))
-                            .accessibilityLabel(item.isFavorite ? "Remove favorite" : "Favorite")
-                        }
-
-                        Label(item.kind.title, systemImage: item.kind.symbol)
-                            .font(.system(.caption, design: .rounded, weight: .bold))
-                            .foregroundStyle(MaybePalette.ink.opacity(0.55))
-                    }
+                VStack(alignment: .leading, spacing: 22) {
+                    titleBlock
 
                     if !item.note.isEmpty {
-                        detailPanel(title: "Why I saved this", symbol: "sparkles") {
+                        panel(title: "Why I saved this") {
                             Text(item.note)
-                                .font(.body)
+                                .font(.system(size: 16))
                                 .foregroundStyle(MaybePalette.ink)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
 
                     if !item.tagNames.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Tags")
-                                .font(.maybeRounded(19, weight: .bold))
-                            FlowTags(tags: item.tagNames, accent: Color(hex: item.accentHex))
+                        FlowLayout(spacing: 8, rowSpacing: 8) {
+                            ForEach(item.tagNames, id: \.self) { tag in
+                                TagChip(name: tag, color: Color(hex: item.accentHex), selected: true)
+                            }
                         }
                     }
 
                     if !item.ideas.isEmpty {
-                        detailPanel(title: "Used in", symbol: "lightbulb.fill") {
-                            ForEach(item.ideas) { idea in
-                                NavigationLink {
-                                    IdeaDetailView(idea: idea)
-                                } label: {
-                                    HStack {
-                                        Text(idea.title)
-                                            .font(.system(.headline, design: .rounded, weight: .bold))
-                                        Spacer()
-                                        Image(systemName: "chevron.right")
+                        panel(title: "Used in") {
+                            VStack(spacing: 8) {
+                                ForEach(item.ideas) { idea in
+                                    NavigationLink {
+                                        IdeaDetailView(idea: idea)
+                                    } label: {
+                                        HStack {
+                                            Text(idea.title)
+                                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .font(.system(size: 12, weight: .bold))
+                                                .foregroundStyle(MaybePalette.inkFaint)
+                                        }
+                                        .foregroundStyle(MaybePalette.ink)
+                                        .contentShape(Rectangle())
                                     }
-                                    .foregroundStyle(MaybePalette.ink)
+                                    .buttonStyle(PressableStyle())
                                 }
                             }
                         }
                     }
 
-                    if let source = item.sourceURLString, !source.isEmpty {
-                        detailPanel(title: "Source", symbol: "link") {
-                            Link(destination: URL(string: source) ?? URL(string: "https://example.com")!) {
+                    if let source = item.sourceURLString, let url = URL(string: source) {
+                        panel(title: "From") {
+                            Link(destination: url) {
                                 HStack {
-                                    Text(URL(string: source)?.host() ?? source)
+                                    Text(item.hostName ?? source)
+                                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                                        .lineLimit(1)
                                     Spacer()
                                     Image(systemName: "arrow.up.right")
+                                        .font(.system(size: 12, weight: .bold))
                                 }
-                                .font(.system(.headline, design: .rounded, weight: .bold))
                                 .foregroundStyle(MaybePalette.ink)
                             }
                         }
                     }
 
-                    Button {
-                        ideaSeed = item
-                    } label: {
-                        Label("Make an idea from this", systemImage: "lightbulb.max.fill")
-                            .frame(maxWidth: .infinity)
+                    if let attachment = item.media.first(where: { $0.type == .file }) {
+                        panel(title: "File") {
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(attachment.originalFilename)
+                                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                                        .lineLimit(2)
+                                    Text("On this device only")
+                                        .font(.maybeMeta)
+                                        .foregroundStyle(MaybePalette.inkSoft)
+                                }
+                                Spacer(minLength: 0)
+                                ShareLink(item: LocalMediaStore().url(at: attachment.localPath)) {
+                                    Image(systemName: "square.and.arrow.up")
+                                        .font(.system(size: 15, weight: .bold))
+                                        .foregroundStyle(MaybePalette.ink)
+                                        .frame(width: 42, height: 42)
+                                        .background { KeycapSurface(color: Color.white.opacity(0.7), cornerRadius: 14, depth: 2) }
+                                }
+                                .accessibilityLabel("Share this file")
+                            }
+                        }
                     }
-                    .buttonStyle(KeycapButtonStyle(color: MaybePalette.yellow, cornerRadius: 22))
+
+                    actions
                 }
-                .padding(20)
-                .padding(.bottom, 30)
-                .background(MaybePalette.cream)
+                .padding(.horizontal, MaybeMetrics.pageInset)
+            }
+            .padding(.bottom, 28)
+        }
+        .background(CreamCanvas())
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button { isEditing = true } label: { Label("Edit", systemImage: "pencil") }
+                    Divider()
+                    Button { savePage() } label: { Label("Save as a page", systemImage: "safari") }
+                    Button { ExportClipboard.copy(item); showCopied() } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .accessibilityLabel("More")
+                .accessibilityIdentifier("edit-item-button")
             }
         }
-        .ignoresSafeArea(edges: .top)
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .fileExporter(
+            isPresented: $isSavingPage,
+            document: pageDocument,
+            contentType: .html,
+            defaultFilename: ExportPage.filename(for: item.title)
+        ) { _ in }
+        .copiedBanner(isShowing: $didCopy)
         .task {
             item.lastViewedAt = .now
             try? modelContext.save()
         }
         .sheet(item: $ideaSeed) { seed in
             NewIdeaSheet(preselectedItem: seed)
+                .presentationDetents([.large])
+        }
+        .sheet(isPresented: $isEditing) {
+            EditItemSheet(item: item, onDeleted: { dismiss() })
+                .presentationDetents([.large])
+        }
+        .sheet(isPresented: $isAddingToIdea) {
+            AddToIdeaSheet(item: item)
                 .presentationDetents([.medium, .large])
+        }
+        .fullScreenCover(item: fullScreenBinding) { index in
+            PhotoViewer(images: item.images, startIndex: index.value, title: item.title)
         }
     }
 
-    private func detailPanel<Content: View>(
+    // MARK: Pieces
+
+    @ViewBuilder
+    private var hero: some View {
+        let images = item.images
+        if images.isEmpty {
+            Color.clear
+                .aspectRatio(item.previewAspect, contentMode: .fit)
+                .overlay { ItemPreview(item: item) }
+                .frame(maxHeight: 320)
+                .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                .padding(.horizontal, MaybeMetrics.pageInset)
+                .padding(.top, 4)
+        } else if images.count == 1 {
+            photoPage(images[0], index: 0, count: 1)
+                .frame(height: heroHeight)
+                .padding(.top, 4)
+        } else {
+            TabView {
+                ForEach(Array(images.enumerated()), id: \.element.id) { index, attachment in
+                    photoPage(attachment, index: index, count: images.count)
+                        .padding(.bottom, 34)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .always))
+            .indexViewStyle(.page(backgroundDisplayMode: .always))
+            .frame(height: heroHeight + 34)
+            .padding(.top, 4)
+        }
+    }
+
+    private var heroHeight: CGFloat {
+        guard let image = item.primaryImage, image.width > 0, image.height > 0 else { return 300 }
+        let ratio = MediaAspect.ratio(width: image.width, height: image.height)
+        // Portrait photos get more room, landscape ones less, but nothing is cropped.
+        return min(430, max(240, 360 / ratio))
+    }
+
+    private func photoPage(_ attachment: MediaAttachment, index: Int, count: Int) -> some View {
+        Button {
+            fullScreenIndex = index
+        } label: {
+            LocalAttachmentImage(
+                attachment: attachment,
+                accessibilityTitle: count > 1 ? "\(item.title), photo \(index + 1) of \(count)" : item.title,
+                prefersOriginal: true,
+                contentMode: .fit
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .strokeBorder(MaybePalette.hairline, lineWidth: 1)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, MaybeMetrics.pageInset)
+        }
+        .buttonStyle(PressableStyle(scale: 0.99))
+    }
+
+    private var titleBlock: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(item.title)
+                    .font(.maybeRounded(26, weight: .black))
+                    .foregroundStyle(MaybePalette.ink)
+                    .multilineTextAlignment(.leading)
+
+                Text(metaLine)
+                    .font(.maybeMeta)
+                    .foregroundStyle(MaybePalette.inkSoft)
+            }
+
+            Spacer(minLength: 0)
+
+            Button {
+                item.isFavorite.toggle()
+                item.modifiedAt = .now
+                try? modelContext.save()
+            } label: {
+                Image(systemName: item.isFavorite ? "heart.fill" : "heart")
+                    .foregroundStyle(item.isFavorite ? MaybePalette.coral : MaybePalette.ink)
+                    .symbolEffect(.bounce, value: item.isFavorite)
+            }
+            .buttonStyle(RoundKeycapButtonStyle(color: Color.white.opacity(0.75), size: 46))
+            .accessibilityLabel(item.isFavorite ? "Remove favourite" : "Favourite")
+        }
+    }
+
+    private var metaLine: String {
+        var parts = [item.kind.title]
+        if item.imageCount > 1 { parts.append("\(item.imageCount) photos") }
+        parts.append(item.createdAt.formatted(date: .abbreviated, time: .omitted))
+        return parts.joined(separator: " · ")
+    }
+
+    private var actions: some View {
+        VStack(spacing: 10) {
+            Button {
+                isAddingToIdea = true
+            } label: {
+                Text("Add to an idea")
+            }
+            .buttonStyle(KeycapButtonStyle(color: MaybePalette.purple, cornerRadius: 20))
+
+            Button {
+                ideaSeed = item
+            } label: {
+                Text("Make a new idea from this")
+            }
+            .buttonStyle(KeycapButtonStyle(color: Color.white.opacity(0.7), cornerRadius: 20))
+        }
+    }
+
+    private func panel<Content: View>(
         title: String,
-        symbol: String,
         @ViewBuilder content: () -> Content
     ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: symbol)
-                .font(.maybeRounded(19, weight: .bold))
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.system(size: 13, weight: .black, design: .rounded))
+                .foregroundStyle(MaybePalette.inkSoft)
+                .textCase(.uppercase)
             content()
         }
-        .padding(17)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.44), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .maybeGlass(cornerRadius: 22)
+        .maybePanel()
+    }
+
+    private func savePage() {
+        pageDocument = ExportPage.page(for: item)
+        isSavingPage = pageDocument != nil
+    }
+
+    private func showCopied() {
+        withAnimation(.snappy(duration: 0.22)) { didCopy = true }
+    }
+
+    private var fullScreenBinding: Binding<IdentifiableIndex?> {
+        Binding(
+            get: { fullScreenIndex.map(IdentifiableIndex.init) },
+            set: { fullScreenIndex = $0?.value }
+        )
     }
 }
 
+struct IdentifiableIndex: Identifiable {
+    let value: Int
+    var id: Int { value }
+}
+
+// MARK: - Idea detail
+
 struct IdeaDetailView: View {
+    @Environment(\.dismiss) private var dismiss
     let idea: Idea
-    private let columns = [GridItem(.adaptive(minimum: 145), spacing: 13)]
+    @State private var isEditing = false
+    @State private var pageDocument: HTMLPageDocument?
+    @State private var isSavingPage = false
+    @State private var didCopy = false
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 22) {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(idea.title)
-                        .font(.maybeRounded(36, weight: .black))
-                    Text(idea.note)
-                        .font(.body)
-                        .foregroundStyle(MaybePalette.ink.opacity(0.6))
-                }
+                        .font(.maybeRounded(30, weight: .black))
+                        .foregroundStyle(MaybePalette.ink)
 
-                HStack {
-                    Label("Inspired by \(idea.items.count) things", systemImage: "sparkles.rectangle.stack.fill")
-                        .font(.system(.subheadline, design: .rounded, weight: .bold))
-                    Spacer()
-                }
-                .padding(16)
-                .background(Color(hex: idea.accentHex).opacity(0.46), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .maybeGlass(cornerRadius: 20, tint: Color(hex: idea.accentHex).opacity(0.2))
-
-                LazyVGrid(columns: columns, spacing: 15) {
-                    ForEach(idea.items) { item in
-                        NavigationLink {
-                            ItemDetailView(item: item)
-                        } label: {
-                            SavedCard(item: item, width: 168)
-                        }
-                        .buttonStyle(.plain)
+                    if !idea.note.isEmpty {
+                        Text(idea.note)
+                            .font(.system(size: 16))
+                            .foregroundStyle(MaybePalette.inkSoft)
                     }
                 }
 
                 if !idea.tagNames.isEmpty {
-                    FlowTags(tags: idea.tagNames, accent: Color(hex: idea.accentHex))
+                    FlowLayout(spacing: 8, rowSpacing: 8) {
+                        ForEach(idea.tagNames, id: \.self) { tag in
+                            TagChip(name: tag, color: Color(hex: idea.accentHex), selected: true)
+                        }
+                    }
+                }
+
+                if idea.items.isEmpty {
+                    EmptyLibraryView(symbol: "square.grid.2x2", title: "Nothing linked to this idea yet.")
+                } else {
+                    VStack(alignment: .leading, spacing: 14) {
+                        SectionHeader(title: "Inspired by", count: idea.items.count)
+                        MasonryGrid(items: idea.items) { $0.previewAspect } content: { item in
+                            NavigationLink {
+                                ItemDetailView(item: item)
+                            } label: {
+                                ItemTile(item: item)
+                            }
+                            .buttonStyle(PressableStyle())
+                        }
+                    }
                 }
             }
-            .padding(20)
-            .padding(.bottom, 90)
+            .padding(.horizontal, MaybeMetrics.pageInset)
+            .padding(.top, 8)
+            .padding(.bottom, 28)
         }
         .background(CreamCanvas())
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button { isEditing = true } label: { Label("Edit", systemImage: "pencil") }
+                    Divider()
+                    Button { savePage() } label: { Label("Save as a page", systemImage: "safari") }
+                    Button { ExportClipboard.copy(idea); showCopied() } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                }
+                .accessibilityLabel("More")
+                .accessibilityIdentifier("idea-menu-button")
+            }
+        }
+        .fileExporter(
+            isPresented: $isSavingPage,
+            document: pageDocument,
+            contentType: .html,
+            defaultFilename: ExportPage.filename(for: idea.title)
+        ) { _ in }
+        .copiedBanner(isShowing: $didCopy)
+        .sheet(isPresented: $isEditing) {
+            EditIdeaSheet(idea: idea, onDeleted: { dismiss() })
+                .presentationDetents([.large])
+        }
     }
 }
 
+extension IdeaDetailView {
+    private func savePage() {
+        pageDocument = ExportPage.page(for: idea)
+        isSavingPage = pageDocument != nil
+    }
+
+    private func showCopied() {
+        withAnimation(.snappy(duration: 0.22)) { didCopy = true }
+    }
+}
+
+// MARK: - Surprise
+
 struct SurpriseView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @Query private var items: [SavedItem]
     @State private var currentItem: SavedItem
+    @State private var isAddingToIdea = false
 
     init(initialItem: SavedItem) {
         _currentItem = State(initialValue: initialItem)
@@ -665,59 +1197,140 @@ struct SurpriseView: View {
     var body: some View {
         ZStack {
             CreamCanvas()
-            VStack(spacing: 20) {
+
+            VStack(spacing: 18) {
                 HStack {
                     Text("Maybe?")
-                        .font(.maybeRounded(30, weight: .black))
+                        .font(.maybeRounded(26, weight: .black))
+                        .foregroundStyle(MaybePalette.ink)
                     Spacer()
                     Button { dismiss() } label: {
                         Image(systemName: "xmark")
                     }
-                    .buttonStyle(RoundKeycapButtonStyle(color: MaybePalette.glassWhite, size: 46))
+                    .buttonStyle(RoundKeycapButtonStyle(color: Color.white.opacity(0.75), size: 44))
                     .accessibilityLabel("Close")
                 }
 
-                InspirationThumbnail(item: currentItem)
-                    .frame(maxWidth: .infinity)
-                    .frame(maxHeight: 500)
-                    .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous).stroke(Color.white.opacity(0.86), lineWidth: 1.5))
-                    .shadow(color: MaybePalette.ink.opacity(0.16), radius: 12, y: 8)
+                ItemPreview(item: currentItem, prefersOriginal: true, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 26, style: .continuous)
+                            .strokeBorder(MaybePalette.hairline, lineWidth: 1)
+                    }
+                    .shadow(color: MaybePalette.ink.opacity(0.12), radius: 2, y: 3)
+                    .frame(maxWidth: .infinity, maxHeight: 470)
 
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(currentItem.title)
-                        .font(.maybeRounded(27, weight: .bold))
-                    Text(currentItem.note)
-                        .font(.body)
-                        .foregroundStyle(MaybePalette.ink.opacity(0.62))
+                        .font(.maybeRounded(22, weight: .bold))
+                        .foregroundStyle(MaybePalette.ink)
+                    if !currentItem.note.isEmpty {
+                        Text(currentItem.note)
+                            .font(.system(size: 15))
+                            .foregroundStyle(MaybePalette.inkSoft)
+                    }
+                    Text("Saved \(currentItem.createdAt.formatted(.relative(presentation: .named)))")
+                        .font(.maybeMeta)
+                        .foregroundStyle(MaybePalette.inkFaint)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                HStack(spacing: 12) {
+                Spacer(minLength: 0)
+
+                HStack(spacing: 10) {
                     Button {
                         currentItem.isFavorite = true
+                        currentItem.modifiedAt = .now
+                        try? modelContext.save()
+                        MaybeHaptics.saved()
                     } label: {
-                        Label("Keep around", systemImage: "heart.fill")
+                        Image(systemName: "heart.fill")
+                            .symbolEffect(.bounce, value: currentItem.isFavorite)
                     }
-                    .buttonStyle(KeycapButtonStyle(color: MaybePalette.coral, cornerRadius: 20))
+                    .buttonStyle(KeycapButtonStyle(color: MaybePalette.coral, cornerRadius: 18))
+                    .accessibilityLabel("Keep around")
+
+                    Button {
+                        isAddingToIdea = true
+                    } label: {
+                        Image(systemName: "lightbulb.fill")
+                    }
+                    .buttonStyle(KeycapButtonStyle(color: MaybePalette.green, cornerRadius: 18))
+                    .accessibilityLabel("Add to an idea")
 
                     Button {
                         if let next = items.filter({ $0.id != currentItem.id }).randomElement() {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
                                 currentItem = next
                             }
                         }
                     } label: {
-                        Label("Next", systemImage: "arrow.right")
+                        Text("Next")
                     }
-                    .buttonStyle(KeycapButtonStyle(color: MaybePalette.blue, cornerRadius: 20))
+                    .buttonStyle(KeycapButtonStyle(color: MaybePalette.blue, cornerRadius: 18))
                 }
             }
-            .padding(20)
+            .padding(MaybeMetrics.pageInset)
         }
+        .task { viewed(currentItem) }
+        .onChange(of: currentItem.id) { _, _ in viewed(currentItem) }
+        .sheet(isPresented: $isAddingToIdea) {
+            AddToIdeaSheet(item: currentItem)
+                .presentationDetents([.medium, .large])
+        }
+    }
+
+    private func viewed(_ item: SavedItem) {
+        item.lastViewedAt = .now
+        try? modelContext.save()
     }
 }
 
-private extension String {
-    var nilIfEmpty: String? { isEmpty ? nil : self }
+// MARK: - Photo viewer
+
+struct PhotoViewer: View {
+    @Environment(\.dismiss) private var dismiss
+    let images: [MediaAttachment]
+    let startIndex: Int
+    let title: String
+
+    @State private var index: Int = 0
+
+    var body: some View {
+        NavigationStack {
+            ZStack {
+                MaybePalette.ink.ignoresSafeArea()
+
+                TabView(selection: $index) {
+                    ForEach(Array(images.enumerated()), id: \.element.id) { offset, attachment in
+                        LocalAttachmentImage(
+                            attachment: attachment,
+                            accessibilityTitle: "\(title), photo \(offset + 1)",
+                            prefersOriginal: true,
+                            contentMode: .fit
+                        )
+                        .tag(offset)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: images.count > 1 ? .always : .never))
+            }
+            .navigationTitle(images.count > 1 ? "\(index + 1) of \(images.count)" : title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Done") { dismiss() }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if images.indices.contains(index) {
+                        ShareLink(item: LocalMediaStore().url(at: images[index].localPath)) {
+                            Image(systemName: "square.and.arrow.up")
+                        }
+                        .accessibilityLabel("Share photo")
+                    }
+                }
+            }
+        }
+        .task { index = startIndex }
+    }
 }

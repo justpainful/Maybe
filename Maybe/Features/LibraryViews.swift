@@ -1,255 +1,423 @@
 import SwiftData
 import SwiftUI
 
+// MARK: - Home
+
 struct HomeView: View {
     @Query(sort: \SavedItem.createdAt, order: .reverse) private var items: [SavedItem]
     @Query(sort: \Idea.modifiedAt, order: .reverse) private var ideas: [Idea]
     @State private var surpriseItem: SavedItem?
+    @State private var launchDetailItem: SavedItem?
+    @State private var launchDetailIdea: Idea?
+    @State private var launchEditItem: SavedItem?
 
     let onSettings: () -> Void
+    let onAdd: () -> Void
+
+    private var resurfaced: SavedItem? {
+        guard let candidate = ResurfacingEngine.pick(from: items) else { return nil }
+        let reference = candidate.lastViewedAt ?? candidate.createdAt
+        // Only worth a section if it has genuinely been out of sight.
+        guard Date.now.timeIntervalSince(reference) > 86_400 * 14 else { return nil }
+        return candidate
+    }
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: MaybeMetrics.sectionSpacing) {
-                MaybeHeader(trailingAction: onSettings)
+            VStack(alignment: .leading, spacing: MaybeMetrics.sectionSpacing) {
+                header
 
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Things that caught you.")
-                        .font(.maybeRounded(28, weight: .black))
-                    Text("Keep them close. Turn them into ideas.")
-                        .font(.subheadline)
-                        .foregroundStyle(MaybePalette.ink.opacity(0.58))
+                if items.isEmpty {
+                    EmptyLibraryView(
+                        symbol: "plus",
+                        title: "Nothing saved yet.",
+                        actionTitle: "Save your first thing",
+                        action: onAdd
+                    )
+                } else {
+                    recentSection
+                    if !ideas.isEmpty { ideasSection }
+                    if let resurfaced { againSection(resurfaced) }
                 }
-
-                recentlySection
-                ideasSection
-                againSection
-                surpriseSection
             }
             .padding(.horizontal, MaybeMetrics.pageInset)
-            .padding(.top, 10)
-            .padding(.bottom, 28)
+            .padding(.top, 6)
+            .padding(.bottom, 24)
         }
         .background(CreamCanvas())
         .toolbar(.hidden, for: .navigationBar)
         .fullScreenCover(item: $surpriseItem) { item in
             SurpriseView(initialItem: item)
         }
+        .fullScreenCover(item: $launchDetailItem) { item in
+            NavigationStack {
+                ItemDetailView(item: item)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Done") { launchDetailItem = nil }
+                        }
+                    }
+            }
+        }
+        .fullScreenCover(item: $launchDetailIdea) { idea in
+            NavigationStack {
+                IdeaDetailView(idea: idea)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("Done") { launchDetailIdea = nil }
+                        }
+                    }
+            }
+        }
+        .sheet(item: $launchEditItem) { item in
+            EditItemSheet(item: item)
+                .presentationDetents([.large])
+        }
+        .onChange(of: items.count, initial: true) { _, _ in
+            openLaunchRouteIfNeeded()
+        }
     }
 
-    private var recentlySection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            MaybeSectionHeader(title: "Recently", subtitle: "Your newest saves")
+    private var header: some View {
+        HStack(spacing: 10) {
+            MaybeMark(size: 40)
+            MaybeWordmark(size: 28)
+            Spacer(minLength: 0)
+            Button(action: onSettings) {
+                Image(systemName: "gearshape.fill")
+            }
+            .buttonStyle(RoundKeycapButtonStyle(color: Color.white.opacity(0.75), size: 42))
+            .accessibilityLabel("Settings")
+            .accessibilityIdentifier("settings-button")
+        }
+    }
 
-            if items.isEmpty {
-                EmptyLibraryView(
-                    symbol: "sparkles.rectangle.stack",
-                    title: "Save your first thing",
-                    message: "A photo, link, note, or file can become a Maybe."
-                )
-            } else {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(items.prefix(2)) { item in
-                        NavigationLink {
-                            ItemDetailView(item: item)
-                        } label: {
-                            SavedCard(item: item, width: nil)
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.plain)
-                        .frame(maxWidth: .infinity)
-                    }
+    private var recentSection: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionHeader(title: "Recent", count: items.count)
+            MasonryGrid(items: Array(items.prefix(8))) { $0.previewAspect } content: { item in
+                NavigationLink {
+                    ItemDetailView(item: item)
+                } label: {
+                    ItemTile(item: item)
                 }
-                .padding(.vertical, 8)
+                .buttonStyle(PressableStyle())
             }
         }
     }
 
     private var ideasSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            MaybeSectionHeader(title: "Ideas", subtitle: "What your saves are becoming")
-
-            if ideas.isEmpty {
-                EmptyLibraryView(
-                    symbol: "lightbulb.max.fill",
-                    title: "Ideas start with a Maybe",
-                    message: "Connect saved things to something you want to make."
-                )
-            } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 14) {
-                        ForEach(ideas.prefix(5)) { idea in
-                            NavigationLink {
-                                IdeaDetailView(idea: idea)
-                            } label: {
-                                IdeaCard(idea: idea, compact: true)
-                            }
-                            .buttonStyle(.plain)
+            SectionHeader(title: "Ideas", count: ideas.count)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: MaybeMetrics.gutter) {
+                    ForEach(ideas.prefix(6)) { idea in
+                        NavigationLink {
+                            IdeaDetailView(idea: idea)
+                        } label: {
+                            IdeaCard(idea: idea, compact: true)
                         }
+                        .buttonStyle(PressableStyle())
                     }
-                    .padding(.vertical, 8)
                 }
-                .scrollEdgeEffectHidden(true, for: .all)
-                .scrollClipDisabled()
+                .padding(.bottom, 4)
             }
+            .contentMargins(.horizontal, 0, for: .scrollContent)
         }
     }
 
-    @ViewBuilder
-    private var againSection: some View {
-        if let resurfaced = ResurfacingEngine.pick(from: items) {
-            VStack(alignment: .leading, spacing: 14) {
-                MaybeSectionHeader(title: "Again", subtitle: "You saved this a while ago")
-                NavigationLink {
-                    ItemDetailView(item: resurfaced)
-                } label: {
-                    HStack(spacing: 16) {
-                        InspirationThumbnail(item: resurfaced)
-                            .frame(width: 132, height: 142)
-                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-
-                        VStack(alignment: .leading, spacing: 9) {
-                            Image(systemName: "arrow.uturn.backward.circle.fill")
-                                .font(.title2)
-                            Text(resurfaced.title)
-                                .font(.system(.title3, design: .rounded, weight: .bold))
-                                .multilineTextAlignment(.leading)
-                            Text(resurfaced.note)
-                                .font(.caption)
-                                .foregroundStyle(MaybePalette.ink.opacity(0.58))
-                                .lineLimit(3)
-                                .multilineTextAlignment(.leading)
-                            Spacer(minLength: 0)
-                            Label("Open again", systemImage: "arrow.up.right")
-                                .font(.system(.caption, design: .rounded, weight: .bold))
-                        }
-                        .foregroundStyle(MaybePalette.ink)
-                        .padding(.vertical, 8)
-                        Spacer(minLength: 0)
-                    }
-                    .padding(10)
-                    .background(Color.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 29, style: .continuous))
-                    .overlay(RoundedRectangle(cornerRadius: 29, style: .continuous).stroke(Color.white.opacity(0.8), lineWidth: 1))
-                    .shadow(color: MaybePalette.ink.opacity(0.1), radius: 8, y: 5)
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private var surpriseSection: some View {
+    private func againSection(_ item: SavedItem) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            MaybeSectionHeader(title: "Maybe?", subtitle: "Rediscover one thing at a time")
-            Button {
+            SectionHeader(title: "Again", actionTitle: "Surprise me") {
                 surpriseItem = items.randomElement()
-            } label: {
-                Label("Surprise me", systemImage: "sparkles")
-                    .frame(maxWidth: .infinity)
             }
-            .buttonStyle(KeycapButtonStyle(color: MaybePalette.yellow, cornerRadius: 22))
-            .disabled(items.isEmpty)
-            .accessibilityIdentifier("surprise-button")
+
+            NavigationLink {
+                ItemDetailView(item: item)
+            } label: {
+                HStack(spacing: 14) {
+                    ItemPreview(item: item, size: .thumbnail)
+                        .frame(width: 84, height: 84)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .strokeBorder(MaybePalette.hairline, lineWidth: 1)
+                        }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.title)
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
+                            .foregroundStyle(MaybePalette.ink)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                        Text("Saved \(item.createdAt.formatted(.relative(presentation: .named)))")
+                            .font(.maybeMeta)
+                            .foregroundStyle(MaybePalette.inkSoft)
+                    }
+
+                    Spacer(minLength: 0)
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(MaybePalette.inkFaint)
+                }
+                .padding(12)
+                .maybePanel()
+            }
+            .buttonStyle(PressableStyle())
+            .accessibilityIdentifier("again-card")
+        }
+    }
+
+    private func openLaunchRouteIfNeeded() {
+        guard !items.isEmpty else { return }
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--show-surprise"), surpriseItem == nil {
+            surpriseItem = ResurfacingEngine.pick(from: items)
+        } else if arguments.contains("--show-detail"), launchDetailItem == nil {
+            launchDetailItem = items.first { $0.imageCount > 1 } ?? items.first
+        } else if arguments.contains("--show-idea-detail"), launchDetailIdea == nil {
+            launchDetailIdea = ideas.first
+        } else if arguments.contains("--show-edit"), launchEditItem == nil {
+            launchEditItem = items.first { $0.imageCount > 1 } ?? items.first
         }
     }
 }
 
-struct InboxView: View {
-    @Query(sort: \SavedItem.createdAt, order: .reverse) private var allItems: [SavedItem]
-    @State private var selectedKind: MaybeKind?
-    @State private var favoritesOnly = false
+// MARK: - Inbox
 
-    private let columns = [GridItem(.adaptive(minimum: 150), spacing: 12)]
-    private let filterColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
+struct InboxView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Query(sort: \SavedItem.createdAt, order: .reverse) private var allItems: [SavedItem]
+    @State private var filter: InboxFilter = .all
+    @State private var editingItem: SavedItem?
+    @State private var ideaItem: SavedItem?
+    @State private var deleteCandidate: SavedItem?
+    @State private var errorMessage: String?
+
+    let onAdd: () -> Void
+
+    private var inboxItems: [SavedItem] { allItems.filter(\.isInbox) }
 
     private var items: [SavedItem] {
-        allItems.filter { item in
-            (item.isInbox || selectedKind != nil || favoritesOnly)
-                && (selectedKind == nil || item.kind == selectedKind)
-                && (!favoritesOnly || item.isFavorite)
-        }
+        inboxItems.filter(filter.matches)
     }
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
-                HStack(alignment: .lastTextBaseline) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Inbox")
-                            .font(.maybeRounded(32, weight: .black))
-                        Text("\(allItems.filter(\.isInbox).count) new things")
-                            .foregroundStyle(MaybePalette.ink.opacity(0.56))
+            VStack(alignment: .leading, spacing: 18) {
+                ScreenTitle(title: "Inbox") {
+                    HStack(spacing: 8) {
+                        if !inboxItems.isEmpty {
+                            Text("\(inboxItems.count)")
+                                .font(.system(size: 14, weight: .black, design: .rounded))
+                                .monospacedDigit()
+                                .contentTransition(.numericText())
+                                .foregroundStyle(MaybePalette.ink)
+                                .frame(minWidth: 34, minHeight: 34)
+                                .background { KeycapSurface(color: MaybePalette.blue, cornerRadius: 12, depth: 2) }
+                                .transition(.scale.combined(with: .opacity))
+                                .accessibilityLabel("\(inboxItems.count) new")
+                        }
+                        Button(action: reviewAll) {
+                            Image(systemName: "checkmark")
+                                .symbolEffect(.bounce, value: inboxItems.count)
+                        }
+                        .buttonStyle(RoundKeycapButtonStyle(color: Color.white.opacity(0.75), size: 42))
+                        .disabled(inboxItems.isEmpty)
+                        .accessibilityLabel("Mark everything reviewed")
                     }
-                    Spacer()
-                    Image(systemName: "tray.full.fill")
-                        .font(.system(size: 19, weight: .bold))
-                        .frame(width: 46, height: 44)
-                        .background(MaybePalette.blue.opacity(0.82), in: RoundedRectangle(cornerRadius: 15, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(Color.white.opacity(0.8), lineWidth: 1))
-                        .shadow(color: MaybePalette.ink.opacity(0.12), radius: 1, y: 3)
                 }
 
-                filters
+                if !inboxItems.isEmpty {
+                    filterRow
+                }
 
                 if items.isEmpty {
                     EmptyLibraryView(
-                        symbol: "tray",
-                        title: "Nothing here yet",
-                        message: "Quick saves land here. You never have to clean it up."
+                        symbol: inboxItems.isEmpty ? "tray" : "line.3.horizontal.decrease",
+                        title: inboxItems.isEmpty ? "Inbox is clear." : "Nothing matches that filter.",
+                        actionTitle: inboxItems.isEmpty ? "Save something" : nil,
+                        action: inboxItems.isEmpty ? onAdd : nil
                     )
                 } else {
-                    LazyVGrid(columns: columns, spacing: 16) {
-                        ForEach(items) { item in
-                            NavigationLink {
-                                ItemDetailView(item: item)
-                            } label: {
-                                SavedCard(item: item, width: nil)
+                    MasonryGrid(items: items) { $0.previewAspect } content: { item in
+                        NavigationLink {
+                            ItemDetailView(item: item)
+                        } label: {
+                            ItemTile(item: item)
+                        }
+                        .buttonStyle(PressableStyle())
+                        .contextMenu {
+                            Button { review(item) } label: {
+                                Label("Mark reviewed", systemImage: "checkmark.circle")
                             }
-                            .buttonStyle(.plain)
+                            Button { ideaItem = item } label: {
+                                Label("Add to idea", systemImage: "lightbulb.fill")
+                            }
+                            Button { editingItem = item } label: {
+                                Label("Edit", systemImage: "pencil")
+                            }
+                            Button {
+                                toggleFavorite(item)
+                            } label: {
+                                Label(
+                                    item.isFavorite ? "Remove favourite" : "Favourite",
+                                    systemImage: item.isFavorite ? "heart.slash" : "heart"
+                                )
+                            }
+                            Divider()
+                            Button(role: .destructive) { deleteCandidate = item } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
                         }
                     }
                 }
             }
             .padding(.horizontal, MaybeMetrics.pageInset)
-            .padding(.top, 12)
-            .padding(.bottom, 28)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
+            .animation(.snappy(duration: 0.28), value: inboxItems.count)
         }
         .background(CreamCanvas())
         .toolbar(.hidden, for: .navigationBar)
+        .sensoryFeedback(.selection, trigger: filter)
+        .sheet(item: $editingItem) { item in
+            EditItemSheet(item: item)
+                .presentationDetents([.large])
+        }
+        .sheet(item: $ideaItem) { item in
+            AddToIdeaSheet(item: item)
+                .presentationDetents([.medium, .large])
+        }
+        .confirmationDialog("Delete this Maybe?", isPresented: deleteBinding, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) { deleteSelected() }
+            Button("Cancel", role: .cancel) { deleteCandidate = nil }
+        } message: {
+            Text("Its local media is removed too.")
+        }
+        .alert("Couldn’t update Inbox", isPresented: errorBinding) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "Please try again.")
+        }
     }
 
-    private var filters: some View {
-        LazyVGrid(columns: filterColumns, spacing: 9) {
-            Button {
-                selectedKind = nil
-                favoritesOnly = false
-            } label: {
-                FilterKeycap(name: "All", color: MaybePalette.yellow, selected: selectedKind == nil && !favoritesOnly)
-            }
-            Button {
-                favoritesOnly.toggle()
-            } label: {
-                FilterKeycap(name: "Favorites", color: MaybePalette.coral, selected: favoritesOnly)
-            }
-            ForEach(MaybeKind.allCases) { kind in
+    private var filterRow: some View {
+        FlowLayout(spacing: 8, rowSpacing: 8) {
+            ForEach(InboxFilter.allCases) { option in
                 Button {
-                    selectedKind = selectedKind == kind ? nil : kind
+                    filter = option
                 } label: {
-                    FilterKeycap(name: kind.title, color: Color(hex: accent(for: kind)), selected: selectedKind == kind)
+                    TagChip(name: option.title, color: option.color, selected: filter == option)
                 }
+                .buttonStyle(PressableStyle(scale: 0.95))
+                .accessibilityIdentifier("filter-\(option.id)")
             }
         }
-        .buttonStyle(.plain)
     }
 
-    private func accent(for kind: MaybeKind) -> String {
-        switch kind {
-        case .photo: "70AEFF"
-        case .link: "87E56D"
-        case .note: "FFD83D"
-        case .file: "7957FF"
+    private var deleteBinding: Binding<Bool> {
+        Binding(get: { deleteCandidate != nil }, set: { if !$0 { deleteCandidate = nil } })
+    }
+
+    private var errorBinding: Binding<Bool> {
+        Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
+    }
+
+    private func review(_ item: SavedItem) {
+        do {
+            try withAnimation(.snappy(duration: 0.28)) {
+                try LibraryMutationService.markReviewed(item, in: modelContext)
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func toggleFavorite(_ item: SavedItem) {
+        item.isFavorite.toggle()
+        item.modifiedAt = .now
+        do {
+            try modelContext.save()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func reviewAll() {
+        do {
+            try withAnimation(.snappy(duration: 0.28)) {
+                for item in allItems where item.isInbox {
+                    item.isInbox = false
+                    item.modifiedAt = .now
+                }
+                try modelContext.save()
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteSelected() {
+        guard let item = deleteCandidate else { return }
+        do {
+            try withAnimation(.snappy(duration: 0.28)) {
+                try LibraryMutationService.delete(item, in: modelContext)
+            }
+            MaybeHaptics.removed()
+            deleteCandidate = nil
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }
+
+enum InboxFilter: String, CaseIterable, Identifiable {
+    case all
+    case favorites
+    case photo
+    case link
+    case note
+    case file
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "All"
+        case .favorites: "Favourites"
+        case .photo: "Photos"
+        case .link: "Links"
+        case .note: "Notes"
+        case .file: "Files"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .all: MaybePalette.yellow
+        case .favorites: MaybePalette.coral
+        case .photo: MaybePalette.blue
+        case .link: MaybePalette.green
+        case .note: MaybePalette.yellow
+        case .file: MaybePalette.purple
+        }
+    }
+
+    func matches(_ item: SavedItem) -> Bool {
+        switch self {
+        case .all: true
+        case .favorites: item.isFavorite
+        case .photo: item.kind == .photo
+        case .link: item.kind == .link
+        case .note: item.kind == .note
+        case .file: item.kind == .file
+        }
+    }
+}
+
+// MARK: - Ideas
 
 struct IdeasView: View {
     @Query(sort: \Idea.modifiedAt, order: .reverse) private var ideas: [Idea]
@@ -257,27 +425,22 @@ struct IdeasView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 22) {
-                HStack(alignment: .lastTextBaseline) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Ideas")
-                            .font(.maybeRounded(32, weight: .black))
-                        Text("Saved things, put to work.")
-                            .foregroundStyle(MaybePalette.ink.opacity(0.56))
-                    }
-                    Spacer()
+            VStack(alignment: .leading, spacing: 20) {
+                ScreenTitle(title: "Ideas") {
                     Button(action: onAdd) {
                         Image(systemName: "plus")
                     }
-                    .buttonStyle(RoundKeycapButtonStyle(color: MaybePalette.green, size: 50))
+                    .buttonStyle(RoundKeycapButtonStyle(color: MaybePalette.green, size: 44))
                     .accessibilityLabel("New idea")
+                    .accessibilityIdentifier("new-idea-button")
                 }
 
                 if ideas.isEmpty {
                     EmptyLibraryView(
-                        symbol: "lightbulb.max",
-                        title: "Make an idea",
-                        message: "Connect the things that inspired it."
+                        symbol: "lightbulb",
+                        title: "An idea is a few saved things,\npointed at something you want to make.",
+                        actionTitle: "Start an idea",
+                        action: onAdd
                     )
                 } else {
                     ForEach(ideas) { idea in
@@ -286,131 +449,198 @@ struct IdeasView: View {
                         } label: {
                             IdeaCard(idea: idea)
                         }
-                        .buttonStyle(.plain)
-                        .frame(maxWidth: .infinity)
+                        .buttonStyle(PressableStyle())
                     }
                 }
             }
             .padding(.horizontal, MaybeMetrics.pageInset)
-            .padding(.top, 12)
-            .padding(.bottom, 28)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
         }
         .background(CreamCanvas())
         .toolbar(.hidden, for: .navigationBar)
     }
 }
 
-private struct FilterKeycap: View {
-    let name: String
-    let color: Color
-    let selected: Bool
-
-    var body: some View {
-        Text(name)
-            .font(.system(.caption, design: .rounded, weight: .bold))
-            .foregroundStyle(MaybePalette.ink)
-            .frame(maxWidth: .infinity)
-            .frame(height: 38)
-            .background((selected ? color : color.opacity(0.58)), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            .overlay(alignment: .top) {
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
-                    .stroke(Color.white.opacity(0.82), lineWidth: 1)
-                    .padding(1)
-            }
-            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(MaybePalette.ink.opacity(selected ? 0.2 : 0.1), lineWidth: 1))
-            .shadow(color: MaybePalette.ink.opacity(0.12), radius: 0.5, y: selected ? 3 : 2)
-    }
-}
+// MARK: - Search
 
 struct LibrarySearchView: View {
     @Query(sort: \SavedItem.createdAt, order: .reverse) private var items: [SavedItem]
+    @Query(sort: \Idea.modifiedAt, order: .reverse) private var ideas: [Idea]
     @State private var searchText = ""
-    @State private var selectedKind: MaybeKind?
-    private let filterColumns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
+    @State private var scope: SearchScope = .everything
 
-    private var results: [SavedItem] {
-        items.filter { item in
-            let matchesKind = selectedKind == nil || item.kind == selectedKind
-            guard matchesKind else { return false }
+    private var itemResults: [SavedItem] {
+        guard scope != .ideas else { return [] }
+        return items.filter { item in
+            guard scope.matches(item) else { return false }
             guard !searchText.isEmpty else { return true }
+            return item.searchHaystack.localizedCaseInsensitiveContains(searchText)
+        }
+    }
+
+    private var ideaResults: [Idea] {
+        guard scope == .everything || scope == .ideas else { return [] }
+        return ideas.filter { idea in
+            guard !searchText.isEmpty else { return scope == .ideas }
             let haystack = [
-                item.title,
-                item.note,
-                item.sourceURLString ?? "",
-                item.tagNames.joined(separator: " "),
-                item.ideas.map(\.title).joined(separator: " "),
+                idea.title,
+                idea.note,
+                idea.tagNames.joined(separator: " "),
+                idea.items.map(\.title).joined(separator: " "),
             ].joined(separator: " ")
             return haystack.localizedCaseInsensitiveContains(searchText)
         }
     }
 
     var body: some View {
-        List {
-            Section {
-                LazyVGrid(columns: filterColumns, spacing: 9) {
-                    Button {
-                        selectedKind = nil
-                    } label: {
-                        FilterKeycap(name: "All", color: MaybePalette.yellow, selected: selectedKind == nil)
-                    }
-                    ForEach(MaybeKind.allCases) { kind in
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                FlowLayout(spacing: 8, rowSpacing: 8) {
+                    ForEach(SearchScope.allCases) { option in
                         Button {
-                            selectedKind = selectedKind == kind ? nil : kind
+                            scope = option
                         } label: {
-                            FilterKeycap(name: kind.title, color: accent(for: kind), selected: selectedKind == kind)
+                            TagChip(name: option.title, color: option.color, selected: scope == option)
                         }
+                        .buttonStyle(PressableStyle(scale: 0.95))
+                        .accessibilityIdentifier("scope-\(option.id)")
                     }
                 }
-                .buttonStyle(.plain)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 8, leading: MaybeMetrics.pageInset, bottom: 8, trailing: MaybeMetrics.pageInset))
-            }
 
-            if results.isEmpty {
-                EmptyLibraryView(
-                    symbol: "magnifyingglass",
-                    title: "No match",
-                    message: "Try a title, thought, source, tag, or idea name."
-                )
-                .listRowBackground(Color.clear)
-            } else {
-                Section("\(results.count) results") {
-                    ForEach(results) { item in
-                        NavigationLink {
-                            ItemDetailView(item: item)
-                        } label: {
-                            HStack(spacing: 13) {
-                                InspirationThumbnail(item: item)
-                                    .frame(width: 70, height: 64)
-                                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(item.title)
-                                        .font(.system(.headline, design: .rounded, weight: .bold))
-                                    Text(item.note.isEmpty ? item.kind.title : item.note)
-                                        .font(.caption)
-                                        .foregroundStyle(MaybePalette.ink.opacity(0.56))
-                                        .lineLimit(2)
+                if itemResults.isEmpty && ideaResults.isEmpty {
+                    EmptyLibraryView(
+                        symbol: "magnifyingglass",
+                        title: searchText.isEmpty ? "Search titles, thoughts, tags, sources." : "Nothing matches “\(searchText)”."
+                    )
+                } else {
+                    if !ideaResults.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            SectionHeader(title: "Ideas", count: ideaResults.count)
+                            ForEach(ideaResults) { idea in
+                                NavigationLink {
+                                    IdeaDetailView(idea: idea)
+                                } label: {
+                                    ideaRow(idea)
                                 }
+                                .buttonStyle(PressableStyle())
                             }
-                            .padding(.vertical, 4)
                         }
                     }
-                    .listRowBackground(Color.white.opacity(0.35))
+
+                    if !itemResults.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            SectionHeader(title: "Things", count: itemResults.count)
+                            ForEach(itemResults) { item in
+                                NavigationLink {
+                                    ItemDetailView(item: item)
+                                } label: {
+                                    ItemRow(item: item)
+                                        .padding(10)
+                                        .maybePanel(cornerRadius: 20)
+                                }
+                                .buttonStyle(PressableStyle())
+                            }
+                        }
+                    }
                 }
             }
+            .padding(.horizontal, MaybeMetrics.pageInset)
+            .padding(.top, 8)
+            .padding(.bottom, 24)
         }
-        .scrollContentBackground(.hidden)
+        .scrollDismissesKeyboard(.interactively)
         .background(CreamCanvas())
-        .navigationTitle("Find anything")
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search your Maybes")
+        .sensoryFeedback(.selection, trigger: scope)
+        .navigationTitle("Find")
+        .navigationBarTitleDisplayMode(.inline)
+        .searchable(
+            text: $searchText,
+            placement: .navigationBarDrawer(displayMode: .always),
+            prompt: "Search everything you kept"
+        )
     }
 
-    private func accent(for kind: MaybeKind) -> Color {
-        switch kind {
-        case .photo: MaybePalette.blue
-        case .link: MaybePalette.green
-        case .note: MaybePalette.yellow
-        case .file: MaybePalette.purple
+    private func ideaRow(_ idea: Idea) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "lightbulb.fill")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(MaybePalette.ink)
+                .frame(width: 58, height: 58)
+                .background {
+                    KeycapSurface(color: Color(hex: idea.accentHex).opacity(0.85), cornerRadius: 15, depth: 2)
+                }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(idea.title)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(MaybePalette.ink)
+                    .lineLimit(1)
+                Text("Inspired by \(idea.items.count)")
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(MaybePalette.inkSoft)
+            }
+            Spacer(minLength: 0)
         }
+        .padding(10)
+        .maybePanel(cornerRadius: 20)
+    }
+}
+
+enum SearchScope: String, CaseIterable, Identifiable {
+    case everything
+    case photos
+    case links
+    case notes
+    case files
+    case ideas
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .everything: "Everything"
+        case .photos: "Photos"
+        case .links: "Links"
+        case .notes: "Notes"
+        case .files: "Files"
+        case .ideas: "Ideas"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .everything: MaybePalette.yellow
+        case .photos: MaybePalette.blue
+        case .links: MaybePalette.green
+        case .notes: MaybePalette.yellow
+        case .files: MaybePalette.coral
+        case .ideas: MaybePalette.purple
+        }
+    }
+
+    func matches(_ item: SavedItem) -> Bool {
+        switch self {
+        case .everything: true
+        case .photos: item.kind == .photo
+        case .links: item.kind == .link
+        case .notes: item.kind == .note
+        case .files: item.kind == .file
+        case .ideas: false
+        }
+    }
+}
+
+extension SavedItem {
+    var searchHaystack: String {
+        [
+            title,
+            note,
+            sourceURLString ?? "",
+            tagNames.joined(separator: " "),
+            ideas.map(\.title).joined(separator: " "),
+            media.map(\.originalFilename).joined(separator: " "),
+            createdAt.formatted(date: .long, time: .omitted),
+        ].joined(separator: " ")
     }
 }
