@@ -789,6 +789,9 @@ struct ItemDetailView: View {
     @State private var isEditing = false
     @State private var isAddingToIdea = false
     @State private var fullScreenIndex: Int?
+    @State private var pageDocument: HTMLPageDocument?
+    @State private var isSavingPage = false
+    @State private var didCopy = false
 
     var body: some View {
         ScrollView {
@@ -889,15 +892,27 @@ struct ItemDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    isEditing = true
+                Menu {
+                    Button { isEditing = true } label: { Label("Edit", systemImage: "pencil") }
+                    Divider()
+                    Button { savePage() } label: { Label("Save as a page", systemImage: "safari") }
+                    Button { ExportClipboard.copy(item); showCopied() } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
                 } label: {
-                    Image(systemName: "pencil")
+                    Image(systemName: "ellipsis")
                 }
-                .accessibilityLabel("Edit")
+                .accessibilityLabel("More")
                 .accessibilityIdentifier("edit-item-button")
             }
         }
+        .fileExporter(
+            isPresented: $isSavingPage,
+            document: pageDocument,
+            contentType: .html,
+            defaultFilename: ExportPage.filename(for: item.title)
+        ) { _ in }
+        .copiedBanner(isShowing: $didCopy)
         .task {
             item.lastViewedAt = .now
             try? modelContext.save()
@@ -1048,6 +1063,15 @@ struct ItemDetailView: View {
         .maybePanel()
     }
 
+    private func savePage() {
+        pageDocument = ExportPage.page(for: item)
+        isSavingPage = pageDocument != nil
+    }
+
+    private func showCopied() {
+        withAnimation(.snappy(duration: 0.22)) { didCopy = true }
+    }
+
     private var fullScreenBinding: Binding<IdentifiableIndex?> {
         Binding(
             get: { fullScreenIndex.map(IdentifiableIndex.init) },
@@ -1067,6 +1091,9 @@ struct IdeaDetailView: View {
     @Environment(\.dismiss) private var dismiss
     let idea: Idea
     @State private var isEditing = false
+    @State private var pageDocument: HTMLPageDocument?
+    @State private var isSavingPage = false
+    @State private var didCopy = false
 
     var body: some View {
         ScrollView {
@@ -1115,18 +1142,42 @@ struct IdeaDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    isEditing = true
+                Menu {
+                    Button { isEditing = true } label: { Label("Edit", systemImage: "pencil") }
+                    Divider()
+                    Button { savePage() } label: { Label("Save as a page", systemImage: "safari") }
+                    Button { ExportClipboard.copy(idea); showCopied() } label: {
+                        Label("Copy", systemImage: "doc.on.doc")
+                    }
                 } label: {
-                    Image(systemName: "pencil")
+                    Image(systemName: "ellipsis")
                 }
-                .accessibilityLabel("Edit idea")
+                .accessibilityLabel("More")
+                .accessibilityIdentifier("idea-menu-button")
             }
         }
+        .fileExporter(
+            isPresented: $isSavingPage,
+            document: pageDocument,
+            contentType: .html,
+            defaultFilename: ExportPage.filename(for: idea.title)
+        ) { _ in }
+        .copiedBanner(isShowing: $didCopy)
         .sheet(isPresented: $isEditing) {
             EditIdeaSheet(idea: idea, onDeleted: { dismiss() })
                 .presentationDetents([.large])
         }
+    }
+}
+
+extension IdeaDetailView {
+    private func savePage() {
+        pageDocument = ExportPage.page(for: idea)
+        isSavingPage = pageDocument != nil
+    }
+
+    private func showCopied() {
+        withAnimation(.snappy(duration: 0.22)) { didCopy = true }
     }
 }
 

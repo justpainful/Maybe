@@ -197,6 +197,52 @@ struct MaybeTests {
         #expect(html.components(separatedBy: "</script>").count == 2)
     }
 
+    @Test("One idea exports as one file that carries its own photos")
+    @MainActor
+    func ideaExportsAsASelfContainedPage() throws {
+        let schema = Schema(versionedSchema: MaybeSchemaV1.self)
+        let container = try ModelContainer(
+            for: schema,
+            migrationPlan: MaybeMigrationPlan.self,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let kept = SavedItem(kind: .photo, title: "Kept", note: "Why I kept it")
+        let other = SavedItem(kind: .photo, title: "Not in the idea")
+        container.mainContext.insert(kept)
+        container.mainContext.insert(other)
+        let payload = try #require(SamplePhotoFactory.jpeg(width: 240, height: 320, seed: 3))
+        try LibraryMutationService.addPhotos([payload], to: kept, in: container.mainContext)
+
+        let idea = Idea(title: "A future room", note: "What it could become", items: [kept])
+        container.mainContext.insert(idea)
+        try container.mainContext.save()
+
+        let data = try #require(
+            ExportPage.render(
+                scope: .idea(idea),
+                items: idea.items,
+                ideas: [idea],
+                media: .inlined(LocalMediaStore()),
+                template: "<html><script>/*__MAYBE_LIBRARY__*/</script></html>"
+            )
+        )
+        let html = try #require(String(data: data, encoding: .utf8))
+
+        #expect(html.contains("A future room"))
+        #expect(html.contains("Why I kept it"))
+        #expect(!html.contains("Not in the idea"))
+        // Nothing may point at a folder: this file travels on its own.
+        #expect(html.contains("data:image/jpeg;base64,"))
+        #expect(!html.contains("\"media/"))
+    }
+
+    @Test("Export filenames stay usable on any filesystem")
+    func exportFilenamesAreSafe() {
+        #expect(ExportPage.filename(for: "Ideas / rooms: 2026?") == "Ideas   rooms  2026")
+        #expect(ExportPage.filename(for: "   ") == "Maybe")
+        #expect(ExportPage.filename(for: String(repeating: "a", count: 200)).count == 60)
+    }
+
     @Test("Library backup is a package with JSON and media folders")
     @MainActor
     func libraryPackageRoundTrip() throws {

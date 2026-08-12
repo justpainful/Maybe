@@ -684,3 +684,35 @@ struct EmptyLibraryView: View {
         .padding(.vertical, 36)
     }
 }
+
+// MARK: - Copied
+
+/// A short, quiet confirmation. Copying is invisible otherwise.
+private struct CopiedBanner: ViewModifier {
+    @Binding var isShowing: Bool
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .bottom) {
+            if isShowing {
+                Text("Copied")
+                    .font(.system(size: 14, weight: .bold, design: .rounded))
+                    .foregroundStyle(MaybePalette.ink)
+                    .padding(.horizontal, 18)
+                    .frame(height: 44)
+                    .background { KeycapSurface(color: MaybePalette.green, cornerRadius: 14, depth: 2) }
+                    .padding(.bottom, 28)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .task {
+                        try? await Task.sleep(for: .seconds(1.6))
+                        withAnimation(.snappy(duration: 0.22)) { isShowing = false }
+                    }
+            }
+        }
+    }
+}
+
+extension View {
+    func copiedBanner(isShowing: Binding<Bool>) -> some View {
+        modifier(CopiedBanner(isShowing: isShowing))
+    }
+}
